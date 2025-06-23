@@ -4,36 +4,36 @@
 #include <unistd.h>
 #include "turn.h"
 
-char board[10] = {'o', '-', '-', '-', '-', '-', '-', '-', '-', '-'}; // our "map"
+char board[9] = {'-', '-', '-', '-', '-', '-', '-', '-', '-'}; // our "map"
 
 void drawBoard()
 {
     printf("\n");
-    printf("|%c|%c|%c|\n", board[1], board[2], board[3]);
+    printf("|%c|%c|%c|\n", board[0], board[1], board[2]);
     printf("\n");
-    printf("|%c|%c|%c|\n", board[4], board[5], board[6]);
+    printf("|%c|%c|%c|\n", board[3], board[4], board[5]);
     printf("\n");
-    printf("|%c|%c|%c|\n", board[7], board[8], board[9]);
+    printf("|%c|%c|%c|\n", board[6], board[7], board[8]);
     printf("\n");
 }
 
 int checkIfWon()
 {
-    if (board[1] == board[2] && board[2] == board[3] && board[1] != '-')
+    if (board[0] == board[1] && board[1] == board[2] && board[0] != '-')
         return 1;
-    else if (board[4] == board[5] && board[5] == board[6] && board[4] != '-')
+    else if (board[3] == board[4] && board[4] == board[5] && board[3] != '-')
         return 1;
-    else if (board[7] == board[8] && board[8] == board[9] && board[7] != '-')
+    else if (board[6] == board[7] && board[7] == board[8] && board[6] != '-')
+        return 1;
+    else if (board[0] == board[3] && board[3] == board[6] && board[0] != '-')
         return 1;
     else if (board[1] == board[4] && board[4] == board[7] && board[1] != '-')
         return 1;
     else if (board[2] == board[5] && board[5] == board[8] && board[2] != '-')
         return 1;
-    else if (board[3] == board[6] && board[6] == board[9] && board[3] != '-')
+    else if (board[0] == board[4] && board[4] == board[8] && board[0] != '-')
         return 1;
-    else if (board[1] == board[5] && board[5] == board[9] && board[1] != '-')
-        return 1;
-    else if (board[3] == board[5] && board[5] == board[7] && board[3] != '-')
+    else if (board[2] == board[4] && board[4] == board[6] && board[2] != '-')
         return 1;
 
     return -1; // win check failed, still playing
@@ -50,6 +50,7 @@ int game(char * code) {
         if (player == 1) {
             mark = 'X';
             choice = bf_turn(code, board);
+            printf("Robot chose %d", choice);
         }
         else {
             mark = 'O';

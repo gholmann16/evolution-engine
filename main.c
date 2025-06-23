@@ -19,6 +19,7 @@ int main() {
     fread(contents, sizeof(char), len, f);
     fclose(f);
 
+    puts(contents);
     game(contents);
 
     return 0;

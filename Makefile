@@ -6,3 +6,6 @@ tt.o: tt.c
 
 turn.o: turn.c
 	gcc -c turn.c
+
+clean:
+	rm *.o

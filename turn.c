@@ -1,17 +1,18 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <stdio.h>
 
 int run(char * contents, char * mem) {
 
     unsigned char memory[65536] = {0};
     unsigned short location = 0;
 
-    for (int a = 0; a < strlen(mem); a++) {
+    for (int a = 0; a < 9; a++) {
         memory[a] = mem[a];
     }
 
-    for (int x = 0; x <= strlen(contents); x++) {
+    for (int x = 0; x < strlen(contents); x++) {
         switch(contents[x]) {
             case '+': 
                 memory[location]++;
@@ -30,7 +31,7 @@ int run(char * contents, char * mem) {
                     int brackets = 1;
                     while (brackets) {
                         x++;
-                        if (x > strlen(contents))
+                        if (x >= strlen(contents))
                             return -1;
                         if (contents[x] == '[')
                             brackets++;
@@ -55,16 +56,19 @@ int run(char * contents, char * mem) {
                     }
                 }
                 break;
+            default:
+                puts("Unknown brainfuck command detecetd");
+                puts("This should NEVER happen");
+                printf("chracter hex: 0x%x\n", contents[x]);
+                exit(-1);
         }
     }
 
     return memory[location];
 }
 
-int bf_turn(char * code, char board[10]) {
-    char mem [11] = {0};
-    strncpy(mem, board, 10);
-    return run(code, mem);
+int bf_turn(char * code, char board[9]) {
+    return run(code, board);
 }
 
 int random_turn() {
