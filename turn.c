@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <time.h>
-#include <globals.h>
+#include <string.h>
 
-int run(char * contents, int len, char * mem) {
+int run(char * contents, char * mem) {
 
     unsigned char memory[65536] = {0};
     unsigned short location = 0;
@@ -11,7 +11,7 @@ int run(char * contents, int len, char * mem) {
         memory[a] = mem[a];
     }
 
-    for (int x = 0; x <= len; x++) {
+    for (int x = 0; x <= strlen(contents); x++) {
         switch(contents[x]) {
             case '+': 
                 memory[location]++;
@@ -30,7 +30,7 @@ int run(char * contents, int len, char * mem) {
                     int brackets = 1;
                     while (brackets) {
                         x++;
-                        if (x > len)
+                        if (x > strlen(contents))
                             return -1;
                         if (contents[x] == '[')
                             brackets++;
@@ -61,12 +61,12 @@ int run(char * contents, int len, char * mem) {
     return memory[location];
 }
 
-int turn1(char mark, char board[10]) {
-    char mem [11] = {0}
+int bf_turn(char * code, char board[10]) {
+    char mem [11] = {0};
     strncpy(mem, board, 10);
-    return run(program_contents, program_len, mem) % 10;
+    return run(code, mem);
 }
 
-int turn2() {
-    
+int random_turn() {
+    return rand() % 9;
 }
