@@ -40,6 +40,10 @@ int checkIfWon()
 }
 
 int game(char * code) {
+
+    if (code == NULL)
+        return 0;
+
     int choice, player = 1, i = -1;
     int turns = 0;
     char mark;

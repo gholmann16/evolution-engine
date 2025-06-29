@@ -1,8 +1,8 @@
-a.out: turn.o tt.o main.c
-	gcc main.c tt.o turn.o
+a.out: turn.o game.o main.c
+	gcc main.c game.o turn.o
 
-tt.o: tt.c
-	gcc -c tt.c
+game.o: game.c
+	gcc -c game.c
 
 turn.o: turn.c
 	gcc -c turn.c
