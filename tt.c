@@ -51,6 +51,8 @@ int game(char * code) {
             mark = 'X';
             choice = bf_turn(code, board);
             printf("Robot chose %d", choice);
+            if (choice > 9)
+                choice = random_turn();
         }
         else {
             mark = 'O';
@@ -71,15 +73,16 @@ int game(char * code) {
     }
 
     drawBoard();
+    player--;
 
-    if (i == 1)
-    {
-        printf("Player %d won!\n", --player); // we need to substract 1 from player
-        return --player;
+    // Announce and score attempts
+    if (i == 1) {
+        printf("Player %d won!\n", --player);
+        return turns + (player % 2) * 100; // How many turns they lasted + 100 if they won
     }
-    else
-    {
+    else {
         printf("Game draw!\n");
-        return 0;
+        return 50;
     }
+    
 }
