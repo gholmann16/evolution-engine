@@ -2,6 +2,4 @@
 #define NUM_WIN 10
 #define NUM_GRAND (NUM_CHILD / NUM_WIN)
 
-#define EXECUTIONS 100
-
 char * evolve(char * parent);

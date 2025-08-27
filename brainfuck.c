@@ -5,7 +5,30 @@
 
 #define MAX_RUNTIME 100000
 
+int validate(char * code) {
+    int open = 0;
+    for (int x = 0; x < strlen(code); x++) {
+        switch (code[x]) {
+            case '[':
+                open++;
+                break;
+            case ']':
+                open--;
+                break;
+        }
+        if (open < 0)
+            return 1; // Mismatching close error
+    }
+    if (open != 0) // Mismatching bracket error
+        return 2;
+
+    return 0;
+}
+
 int run(char * code, char * mem, unsigned short size) {
+
+    if(validate(code) != 0)
+        return 9999999; //Punishment for failing
 
     unsigned char memory[65536] = {0};
     unsigned short location = 0;
@@ -35,12 +58,10 @@ int run(char * code, char * mem, unsigned short size) {
                     int brackets = 1;
                     while (brackets) {
                         x++;
-                        if (x >= strlen(code))
-                            return -1;
                         if (code[x] == '[')
                             brackets++;
                         else if (code[x] == ']')
-                            ; // Don't allow code to run because confirmed it skips
+                            brackets--;
                     }
                 }
                 break;
@@ -49,14 +70,10 @@ int run(char * code, char * mem, unsigned short size) {
                     int rev = 1;
                     while(rev) {
                         x--;
-                        if (x < 0)
-                            return -1;
-                        if (code[x] == ']') {
+                        if (code[x] == ']')
                             rev++;
-                        }
-                        else if (code[x] == '[') {
-                            ; // Don't allow code to run because confirmed it enters
-                        }
+                        else if (code[x] == '[')
+                            rev--;
                     }
                 }
                 break;

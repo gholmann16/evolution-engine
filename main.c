@@ -2,17 +2,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "game.h"
+#include "brainfuck.h"
 #include "generator.h"
+
+#define EXECUTIONS 10000
+#define MAGIC_NUMBER 100
 
 struct Program {
     char * brainfuck;
-    size_t score;
+    int score;
 };
 
 int compare_ratings(const void * first, const void * second) {
-    // Second minus fist because we want to sort in descending order
-    return ((struct Program *) second)->score - ((struct Program *) first)->score; 
+    // First minus second because we now want to sort in ascending order
+    return ((struct Program *) first)->score - ((struct Program *) second)->score; 
+}
+
+int score(char * code) {
+    return abs(MAGIC_NUMBER - run(code, NULL, 0));
 }
 
 int main() {
@@ -33,12 +40,12 @@ int main() {
             }
         }
         for (int i = 0; i < NUM_CHILD; i++) {
-            children[i].score = game(children[i].brainfuck);
+            children[i].score = score(children[i].brainfuck);
         }
 
         qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
         if (children[0].brainfuck)
-            puts(children[0].brainfuck);
+            printf("Winner of generation %d with a score of %d is %s\n", runs, children[0].score, children[0].brainfuck);
     }
     return 0;
 }

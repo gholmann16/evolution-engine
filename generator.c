@@ -13,7 +13,7 @@ char * evolve(char * parent) {
     int additions = rand() % 20;
     size_t new_len = strlen(parent) + additions;
 
-    char * child = malloc(new_len);
+    char * child = malloc(new_len + 1); //In case it fills, the 0
     int added = 0;
     size_t index = 0;
 
@@ -24,7 +24,7 @@ char * evolve(char * parent) {
                 added--;
                 break;
             case 1: // 1 % chance you add code
-                if (added <= additions) {
+                if (added < additions) {
                     added++;
                     child[index++] = rand_dna();
                 }
