@@ -25,8 +25,11 @@ int main() {
         for (int winner = NUM_WIN - 1; winner >= 0; winner--) {
             // Also needs to go backwards, otherwise the last child (absolute winner) would overwrite itself while evolving
             for (int grandchild = NUM_GRAND - 1; grandchild >= 0; grandchild--) {
+                // printf("child %d evolved with code %s\n", winner, children[winner].brainfuck);
                 char * dna = evolve(children[winner].brainfuck);
+                free(children[winner * NUM_GRAND + grandchild].brainfuck);
                 children[winner * NUM_GRAND + grandchild].brainfuck = dna;
+                // printf("child %d assigned to %s\n", winner * NUM_GRAND + grandchild, dna);
             }
         }
         for (int i = 0; i < NUM_CHILD; i++) {

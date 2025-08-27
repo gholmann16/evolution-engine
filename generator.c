@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 char rand_dna() {
     char * chars = "+-<>[]";
@@ -7,32 +8,37 @@ char rand_dna() {
 }
 
 char * evolve(char * parent) {
-    size_t len = (parent == NULL) ? 0 : strlen(parent);
-    
-    char * child = malloc(len * 2); //Maximum new length, if every switch case is decided as an addition
+    if (parent == NULL)
+        parent = "+++++";
+    int additions = rand() % 20;
+    size_t new_len = strlen(parent) + additions;
+
+    char * child = malloc(new_len);
+    int added = 0;
     size_t index = 0;
 
-    for (int gene = 0; gene < len; gene) {
-        int decision = rand() % 50;
+    for (int gene = 0; gene < strlen(parent); gene++) {
+        int decision = rand() % 100;
         switch (decision) {
-            case 0: // 2 % chance you remove code
+            case 0: // 1 % chance you remove code
+                added--;
                 break;
-            case 1: // 2 % chance you add code
-                child[index] = rand_dna();
-                index++; // End so you don't add infinite code
-            default: // 90 % chance you do nothing
-                child[index] = parent[gene];
-                index++;
+            case 1: // 1 % chance you add code
+                if (added <= additions) {
+                    added++;
+                    child[index++] = rand_dna();
+                }
+            default: // 95 % chance you do nothing (slightly more because additions go here after)
+                child[index++] = parent[gene];
                 break;
             case 47:
-            case 48: // 6% chance you modify
+            case 48: // 3% chance you modify
             case 49:
-                child[index] = rand_dna();
-                index++;
+                child[index++] = rand_dna();
                 break;
         }
     }
 
-    free(parent);
+    child[index] = 0;
     return child;
 }

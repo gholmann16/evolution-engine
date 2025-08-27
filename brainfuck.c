@@ -3,17 +3,21 @@
 #include <string.h>
 #include <stdio.h>
 
-int run(char * contents, char * mem) {
+#define MAX_RUNTIME 100000
+
+int run(char * code, char * mem, unsigned short size) {
 
     unsigned char memory[65536] = {0};
     unsigned short location = 0;
+    unsigned int runtime = 0;
 
-    for (int a = 0; a < 9; a++) {
+    for (int a = 0; a < size; a++) {
         memory[a] = mem[a];
     }
 
-    for (int x = 0; x < strlen(contents); x++) {
-        switch(contents[x]) {
+    for (int x = 0; x < strlen(code) && runtime < MAX_RUNTIME; x++) {
+        runtime++;
+        switch(code[x]) {
             case '+': 
                 memory[location]++;
                 break;
@@ -31,12 +35,12 @@ int run(char * contents, char * mem) {
                     int brackets = 1;
                     while (brackets) {
                         x++;
-                        if (x >= strlen(contents))
+                        if (x >= strlen(code))
                             return -1;
-                        if (contents[x] == '[')
+                        if (code[x] == '[')
                             brackets++;
-                        else if (contents[x] == ']')
-                            brackets--;
+                        else if (code[x] == ']')
+                            ; // Don't allow code to run because confirmed it skips
                     }
                 }
                 break;
@@ -47,30 +51,23 @@ int run(char * contents, char * mem) {
                         x--;
                         if (x < 0)
                             return -1;
-                        if (contents[x] == ']') {
+                        if (code[x] == ']') {
                             rev++;
                         }
-                        else if (contents[x] == '[') {
-                            rev--;
+                        else if (code[x] == '[') {
+                            ; // Don't allow code to run because confirmed it enters
                         }
                     }
                 }
                 break;
             default:
-                puts("Unknown brainfuck command detecetd");
-                puts("This should NEVER happen");
-                printf("chracter hex: 0x%x\n", contents[x]);
+                puts("Unknown brainfuck command deteceted");
+                printf("chracter hex: 0x%x\n", code[x]);
+                puts("Code:");
+                puts(code);
                 exit(-1);
         }
     }
 
     return memory[location];
-}
-
-int bf_turn(char * code, char board[9]) {
-    return run(code, board);
-}
-
-int random_turn() {
-    return rand() % 9;
 }

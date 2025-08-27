@@ -1,14 +1,14 @@
-a.out: turn.o game.o main.c generator.o
-	gcc -g main.c game.o turn.o generator.o
+a.out: brainfuck.o game.o main.c generator.o
+	gcc -g main.c game.o brainfuck.o generator.o
 
 game.o: game.c
-	gcc -c game.c
+	gcc -c -g game.c
 
-turn.o: turn.c
-	gcc -c turn.c
+brainfuck.o: brainfuck.c
+	gcc -c -g brainfuck.c
 
 generator.o: generator.c
-	gcc -c generator.c
+	gcc -c -g generator.c
 
 clean:
 	rm *.o
