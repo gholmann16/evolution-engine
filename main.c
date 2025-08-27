@@ -3,8 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "game.h"
-
-#define AMOUNT 100
+#include "generator.h"
 
 struct Program {
     char * brainfuck;
@@ -19,27 +18,24 @@ int compare_ratings(const void * first, const void * second) {
 int main() {
 
     srand(time(NULL));
-    struct Program children[AMOUNT] = {0};
+    struct Program children[NUM_CHILD] = {0};
 
-    for (int i = 0; i < AMOUNT; i++) {
-        children[i].score = game(children[i].brainfuck);
+    for(int runs = 0; runs < EXECUTIONS; runs++) {
+        // Go backwards for evolve in place
+        for (int winner = NUM_WIN - 1; winner >= 0; winner--) {
+            // Also needs to go backwards, otherwise the last child (absolute winner) would overwrite itself while evolving
+            for (int grandchild = NUM_GRAND - 1; grandchild >= 0; grandchild--) {
+                char * dna = evolve(children[winner].brainfuck);
+                children[winner * NUM_GRAND + grandchild].brainfuck = dna;
+            }
+        }
+        for (int i = 0; i < NUM_CHILD; i++) {
+            children[i].score = game(children[i].brainfuck);
+        }
+
+        qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
+        if (children[0].brainfuck)
+            puts(children[0].brainfuck);
     }
-
-    qsort(children, AMOUNT, sizeof(struct Program), compare_ratings);
-
-    // FILE * f = fopen("bf", "r");
-
-    // fseek(f, 0L, SEEK_END);
-    // size_t len = ftell(f);
-    
-    // fseek(f, 0L, SEEK_SET);	
-    // char * contents = malloc(len);	
-    
-    // fread(contents, sizeof(char), len, f);
-    // fclose(f);
-
-    // puts(contents);
-    // int score = game(starter);
-
     return 0;
 }
