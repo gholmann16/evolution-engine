@@ -28,7 +28,7 @@ int validate(char * code) {
 int run(char * code, char * mem, unsigned short size) {
 
     if(validate(code) != 0)
-        return 9999999; //Punishment for failing
+        return 50000; //Punishment for failing
 
     unsigned char memory[65536] = {0};
     unsigned short location = 0;
@@ -38,8 +38,10 @@ int run(char * code, char * mem, unsigned short size) {
         memory[a] = mem[a];
     }
 
-    for (int x = 0; x < strlen(code) && runtime < MAX_RUNTIME; x++) {
-        runtime++;
+    for (int x = 0; x < strlen(code); x++) {
+        if (++runtime == MAX_RUNTIME)
+            return 50000;
+
         switch(code[x]) {
             case '+': 
                 memory[location]++;

@@ -8,6 +8,10 @@
 #define EXECUTIONS 10000
 #define MAGIC_NUMBER 100
 
+#define NUM_CHILD 100
+#define NUM_WIN 10
+#define NUM_GRAND (NUM_CHILD / NUM_WIN)
+
 struct Program {
     char * brainfuck;
     int score;
@@ -19,7 +23,7 @@ int compare_ratings(const void * first, const void * second) {
 }
 
 int score(char * code) {
-    return abs(MAGIC_NUMBER - run(code, NULL, 0));
+    return abs(MAGIC_NUMBER - run(code, NULL, 0))*10 + strlen(code);
 }
 
 int main() {
@@ -46,6 +50,8 @@ int main() {
         qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
         if (children[0].brainfuck)
             printf("Winner of generation %d with a score of %d is %s\n", runs, children[0].score, children[0].brainfuck);
+        if (children[0].score == 0)
+            return 0;
     }
     return 0;
 }
