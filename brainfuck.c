@@ -8,7 +8,6 @@
 
 int validate(char * code) {
     int open = 0;
-    int output = 0;
     for (int x = 0; x < strlen(code); x++) {
         switch (code[x]) {
             case '[':
@@ -16,9 +15,6 @@ int validate(char * code) {
                 break;
             case ']':
                 open--;
-                break;
-            case '.':
-                output++;
                 break;
         }
         if (open < 0)
