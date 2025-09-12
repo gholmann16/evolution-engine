@@ -1,8 +1,8 @@
-a.out: brainfuck.o game.o main.c generator.o
-	gcc -g main.c game.o brainfuck.o generator.o
+a.out: brainfuck.o main.c generator.o
+	gcc -g main.c brainfuck.o generator.o
 
-game.o: game.c
-	gcc -c -g game.c
+# game.o: game.c
+# 	gcc -c -g game.c
 
 brainfuck.o: brainfuck.c
 	gcc -c -g brainfuck.c

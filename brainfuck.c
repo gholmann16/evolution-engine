@@ -4,9 +4,11 @@
 #include <stdio.h>
 
 #define MAX_RUNTIME 100000
+#define MAX_OUTPUT 1024
 
 int validate(char * code) {
     int open = 0;
+    int output = 0;
     for (int x = 0; x < strlen(code); x++) {
         switch (code[x]) {
             case '[':
@@ -14,6 +16,9 @@ int validate(char * code) {
                 break;
             case ']':
                 open--;
+                break;
+            case '.':
+                output++;
                 break;
         }
         if (open < 0)
@@ -25,12 +30,14 @@ int validate(char * code) {
     return 0;
 }
 
-int run(char * code, char * mem, unsigned short size) {
+char * run(char * code, char * mem, unsigned short size) {
 
     if(validate(code) != 0)
-        return 50000; //Punishment for failing
+        return NULL; //Punishment for failing
 
-    unsigned char memory[65536] = {0};
+    char memory[65536] = {0};
+    char * output = calloc(MAX_OUTPUT, sizeof(char));
+    unsigned int index = 0;
     unsigned short location = 0;
     unsigned int runtime = 0;
 
@@ -39,8 +46,10 @@ int run(char * code, char * mem, unsigned short size) {
     }
 
     for (int x = 0; x < strlen(code); x++) {
-        if (++runtime == MAX_RUNTIME)
-            return 50000;
+        if (++runtime == MAX_RUNTIME) {
+            free(output);
+            return NULL;
+        }
 
         switch(code[x]) {
             case '+': 
@@ -79,8 +88,16 @@ int run(char * code, char * mem, unsigned short size) {
                     }
                 }
                 break;
+            case '.':
+                if (index == MAX_OUTPUT) {
+                    free(output);
+                    return NULL;
+                }
+                output[index] = memory[location];
+                index++;
+                break;
             default:
-                puts("Unknown brainfuck command deteceted");
+                puts("Unknown brainfuck command detected");
                 printf("chracter hex: 0x%x\n", code[x]);
                 puts("Code:");
                 puts(code);
@@ -88,5 +105,5 @@ int run(char * code, char * mem, unsigned short size) {
         }
     }
 
-    return memory[location];
+    return output;
 }

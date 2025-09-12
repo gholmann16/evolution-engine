@@ -3,13 +3,11 @@
 #include <stdio.h>
 
 char rand_dna() {
-    char * chars = "+-<>[]";
-    return chars[rand() % 6];
+    char * chars = "+-<>[].";
+    return chars[rand() % 7];
 }
 
 char * evolve(char * parent) {
-    if (parent == NULL)
-        parent = "+++++";
     int additions = rand() % 20;
     size_t new_len = strlen(parent) + additions;
 

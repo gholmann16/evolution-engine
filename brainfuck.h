@@ -1,1 +1,1 @@
-int run(char * code, char * mem, unsigned short size);
+char * run(char * code, char * mem, unsigned short size);
