@@ -6,12 +6,15 @@
 #include "generator.h"
 #include "game.h"
 
-#define EXECUTIONS 1000
-#define MAGIC_NUMBER 100
+#define EXECUTIONS 100000
+#define WORST 50000
 
 #define NUM_WIN 100
 #define NUM_CHILD NUM_WIN * NUM_WIN
 #define NUM_GRAND NUM_CHILD / NUM_WIN
+
+#define DEFAULT_RANDOMNESS 550
+int randomness = DEFAULT_RANDOMNESS;
 
 struct Program {
     char * brainfuck;
@@ -28,18 +31,15 @@ int score(char * code) {
     char * word = "Hi there";
 
     if (response == NULL)
-        return 50000;
+        return WORST;
 
     int diff = strlen(word) - strlen(response);
     int sc = abs(diff) * 255;
     int compare = (diff > 0) ? strlen(response) : strlen(word);
-    for (int i = 0; i < compare; i++) {
+    for (int i = 0; i < compare; i++)
         sc += abs(word[i] - response[i]);
-        if (word[i] - response[i] == 0)
-            sc - 10;
-    }
 
-    sc *= 10;
+    sc *= 50;
     free(response);
     return sc + strlen(code);
 }
@@ -51,6 +51,9 @@ int main() {
     // Set the default
     for(int ancestor = 0; ancestor < NUM_WIN; ancestor++)
         children[ancestor].brainfuck = strdup(".>.>.>.>.");
+
+    int best = WORST;
+    int times = 0;
 
     for(int runs = 0; runs < EXECUTIONS; runs++) {
         // Go backwards for evolve in place
@@ -71,10 +74,27 @@ int main() {
         }
 
         qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
+
+        if (children[0].score == best)
+            times++;
+        else {
+            times = 0;
+            best = children[0].score;
+        }
+
         if (children[0].brainfuck)
-            printf("Winner of generation %d with a score of %d is %s\n", runs, children[0].score, children[0].brainfuck);
-        if (children[0].score == 0)
-            return 0;
+            printf("Winner of generation %d with a score of %d is %s (won %d times)\n", 
+                runs, children[0].score, children[0].brainfuck, times);
+        if (children[0].score == strlen(children[0].brainfuck)) {
+            puts("Solved");
+            break;
+        }
+
+        randomness = DEFAULT_RANDOMNESS - times;
+        if (randomness == 50) {
+            puts("I give up");
+            break;
+        }
     }
 
     for (int to_free = 0; to_free < NUM_CHILD; to_free++)

@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdio.h>
 
+extern int randomness;
+
 char rand_dna() {
     char * chars = "+-<>[].";
     return chars[rand() % 7];
@@ -16,7 +18,7 @@ char * evolve(char * parent) {
     size_t index = 0;
 
     for (int gene = 0; gene < strlen(parent); gene++) {
-        int decision = rand() % 100;
+        int decision = rand() % randomness;
         switch (decision) {
             case 0: // 1 % chance you remove code
                 added--;
@@ -29,9 +31,9 @@ char * evolve(char * parent) {
             default: // 95 % chance you do nothing (slightly more because additions go here after)
                 child[index++] = parent[gene];
                 break;
-            case 47:
-            case 48: // 3% chance you modify
-            case 49:
+            case 2:
+            case 3: // 3% chance you modify
+            case 4:
                 child[index++] = rand_dna();
                 break;
         }
