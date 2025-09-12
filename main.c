@@ -27,8 +27,9 @@ int compare_ratings(const void * first, const void * second) {
 }
 
 int score(char * code) {
-    char * response = run(code, "Hello", 5);
-    char * word = "Hi there";
+    char * question = "2x^3";
+    char * response = run(code, question, strlen(question));
+    char * word = "6x^2";
 
     if (response == NULL)
         return WORST;
@@ -48,26 +49,22 @@ int main() {
 
     srand(time(NULL));
     struct Program children[NUM_CHILD] = {0};
+    struct Program parent[NUM_WIN] = {0};
+
     // Set the default
     for(int ancestor = 0; ancestor < NUM_WIN; ancestor++)
-        children[ancestor].brainfuck = strdup(".>.>.>.>.");
+        parent[ancestor].brainfuck = strdup(".>.>.>.>.");
 
     int best = WORST;
     int times = 0;
 
     for(int runs = 0; runs < EXECUTIONS; runs++) {
-        // Go backwards for evolve in place
-        for (int winner = NUM_WIN - 1; winner >= 0; winner--) {
-            // Also needs to go backwards, otherwise the last child (absolute winner) would overwrite itself while evolving
-            for (int grandchild = NUM_GRAND - 1; grandchild > 0; grandchild--) {
-                char * dna = evolve(children[winner].brainfuck);
-                free(children[winner * NUM_GRAND + grandchild].brainfuck);
-                children[winner * NUM_GRAND + grandchild].brainfuck = dna;
-            }
-            // Keep the winner around so you never regress
-            char * agamogenesis = strdup(children[winner].brainfuck);
-            free(children[winner * NUM_GRAND].brainfuck);
-            children[winner * NUM_GRAND].brainfuck = agamogenesis;
+        // Evolve from winning pool
+        for (int winner = 0; winner < NUM_WIN; winner++) {
+            // Keep the winner around so you never regress (agamogenesis)
+            children[winner * NUM_GRAND].brainfuck = parent[winner].brainfuck;
+            for (int grandchild = 1; grandchild < NUM_GRAND; grandchild++)
+                children[winner * NUM_GRAND + grandchild].brainfuck = evolve(parent[winner].brainfuck);
         }
         for (int i = 0; i < NUM_CHILD; i++) {
             children[i].score = score(children[i].brainfuck);
@@ -95,10 +92,27 @@ int main() {
             puts("I give up");
             break;
         }
+
+        // Get winning pool, shoot for diversity
+        parent[0].brainfuck = children[0].brainfuck;
+        int found = 1;
+        for (int candidate = 1; candidate < NUM_CHILD; candidate++) {
+            /* 
+             * If we haven't found all winners, and this one is not identical to the previous winner
+             * Can still have duplicates probably but not all duplicates, at least some genetic variety
+             * If they're all the same hypothetically, then some left over dna from last generation would stay
+             * Conveniently, the worse dna of the batch because the winners will stay winners
+             * Frees everything we need, since parent and children share a pool
+             */
+            if (found != NUM_WIN && strcmp(children[candidate].brainfuck, parent[found - 1].brainfuck) != 0)
+                parent[found++].brainfuck = children[candidate].brainfuck;
+            else
+                free(children[candidate].brainfuck);
+        }
     }
 
-    for (int to_free = 0; to_free < NUM_CHILD; to_free++)
-        free(children[to_free].brainfuck);
+    for (int to_free = 0; to_free < NUM_WIN; to_free++)
+        free(parent[to_free].brainfuck);
 
     return 0;
 }

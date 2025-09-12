@@ -1,5 +1,5 @@
 fast: brainfuck.o main.o generator.o
-	gcc -flto main.c brainfuck.o generator.o
+	gcc -flto main.o brainfuck.o generator.o
 
 # game.o: game.c
 # 	gcc -c -g game.c
