@@ -1,3 +1,9 @@
+risc: sucrisc.o main.o
+	gcc -flto sucrisc.o main.o
+
+sucrisc.o: sucrisc.c
+	gcc -c -O3 -g sucrisc.c
+
 fast: brainfuck.o main.o generator.o
 	gcc -flto main.o brainfuck.o generator.o
 

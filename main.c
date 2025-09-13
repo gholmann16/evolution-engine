@@ -2,9 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "brainfuck.h"
-#include "generator.h"
-#include "game.h"
+#include "sucrisc.h"
 
 #define EXECUTIONS 100000
 #define WORST 50000
@@ -15,24 +13,26 @@
 
 #define DEFAULT_RANDOMNESS 550
 int randomness = DEFAULT_RANDOMNESS;
-
-struct Program {
-    char * brainfuck;
-    int score;
-};
+unsigned short memory[65536];
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
     return ((struct Program *) first)->score - ((struct Program *) second)->score; 
 }
 
-int score(char * code) {
-    char * question = "2x^3";
-    char * response = run(code, question, strlen(question));
-    char * word = "6x^2";
+int compare_code(struct Program first, struct Program second) {
+    if (first.size != second.size)
+        return 1;
+    for (int i = 0; i < first.size; i++)
+        if (first.code[i] != second.code[i])
+            return 1;
+    return 0;
+}
 
-    if (response == NULL)
-        return WORST;
+void score(struct Program * program) {
+    char * question = "Macy";
+    char * response = run(program->code, program->size, question, strlen(question));
+    char * word = "Bitter";
 
     int diff = strlen(word) - strlen(response);
     int sc = abs(diff) * 255;
@@ -41,8 +41,8 @@ int score(char * code) {
         sc += abs(word[i] - response[i]);
 
     sc *= 50;
-    free(response);
-    return sc + strlen(code);
+
+    program->score = sc + program->size;
 }
 
 int main() {
@@ -52,8 +52,10 @@ int main() {
     struct Program parent[NUM_WIN] = {0};
 
     // Set the default
-    for(int ancestor = 0; ancestor < NUM_WIN; ancestor++)
-        parent[ancestor].brainfuck = strdup(".>.>.>.>.");
+    for(int ancestor = 0; ancestor < NUM_WIN; ancestor++) {
+        parent[ancestor].code = malloc(sizeof(short));
+        parent[ancestor].size = 1;
+    }
 
     int best = WORST;
     int times = 0;
@@ -62,12 +64,12 @@ int main() {
         // Evolve from winning pool
         for (int winner = 0; winner < NUM_WIN; winner++) {
             // Keep the winner around so you never regress (agamogenesis)
-            children[winner * NUM_GRAND].brainfuck = parent[winner].brainfuck;
+            children[winner * NUM_GRAND].code = parent[winner].code;
             for (int grandchild = 1; grandchild < NUM_GRAND; grandchild++)
-                children[winner * NUM_GRAND + grandchild].brainfuck = evolve(parent[winner].brainfuck);
+                children[winner * NUM_GRAND + grandchild] = evolve(parent[winner].code, parent[winner].size);
         }
         for (int i = 0; i < NUM_CHILD; i++) {
-            children[i].score = score(children[i].brainfuck);
+            score(&children[i]);
         }
 
         qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
@@ -79,10 +81,10 @@ int main() {
             best = children[0].score;
         }
 
-        if (children[0].brainfuck)
+        if (children[0].code)
             printf("Winner of generation %d with a score of %d is %s (won %d times)\n", 
-                runs, children[0].score, children[0].brainfuck, times);
-        if (children[0].score == strlen(children[0].brainfuck)) {
+                runs, children[0].score, children[0].code, times);
+        if (children[0].score == children[0].size) {
             puts("Solved");
             break;
         }
@@ -94,7 +96,7 @@ int main() {
         }
 
         // Get winning pool, shoot for diversity
-        parent[0].brainfuck = children[0].brainfuck;
+        parent[0].code = children[0].code;
         int found = 1;
         for (int candidate = 1; candidate < NUM_CHILD; candidate++) {
             /* 
@@ -104,15 +106,15 @@ int main() {
              * Conveniently, the worse dna of the batch because the winners will stay winners
              * Frees everything we need, since parent and children share a pool
              */
-            if (found != NUM_WIN && strcmp(children[candidate].brainfuck, parent[found - 1].brainfuck) != 0)
-                parent[found++].brainfuck = children[candidate].brainfuck;
+            if (found != NUM_WIN && compare_code(children[candidate], parent[found - 1]))
+                parent[found++].code = children[candidate].code;
             else
-                free(children[candidate].brainfuck);
+                free(children[candidate].code);
         }
     }
 
     for (int to_free = 0; to_free < NUM_WIN; to_free++)
-        free(parent[to_free].brainfuck);
+        free(parent[to_free].code);
 
     return 0;
 }
