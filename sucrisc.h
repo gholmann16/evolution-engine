@@ -15,3 +15,4 @@ struct Program {
 
 char * run(short * code, unsigned int size, char * input, unsigned int isize);
 struct Program evolve(short * code, unsigned int size);
+int validate(char * code, unsigned int size);

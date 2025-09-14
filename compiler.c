@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "suncrisc.h"
+#include "vector.h"
 
 struct String {
     char * contents;
@@ -33,18 +34,52 @@ char * begin_boiler =
     "xor r12, r12\nxor r13, r13\nxor r14, r14\nxor r15, r15\n"
     ;
 
-char * translate(short opcode) {
+char * registers = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"};
+
+void fill(char ** dirop, short opcode) {
+    char * translation = *dirop;
+
+    if (opcode & OPCODE_MASK)
+        strcat(translation, "byte[memory + ");
+    strcat(translation, registers[regnum]);
+    if (opcode & OPCODE_MASK)
+        strcat(translation, "]");
+    strcat(", ");
+
+    char val[32];
+    int regnum = opcode & FROMREGMASK;
+
+    if (opcode & OR_NUM_MASK)
+        sprintf(val, "%d\n", opcode & DIRNUM_MASK);
+    else if (opcode & FROMMEMMASK)
+        sprintf(val, "byte[memory + %s]", registers[regnum]);
+    else // raw reg
+        sprintf(val, registers[regnum]);
+
+    strcat(translation, val);
+}
+
+char * translate(short opcode, struct Vector points) {
     char * translation = malloc(256);
-    char * registers = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"};
-        int regnum = opcode & TO_REG_MASK;
+    int regnum = opcode & TO_REG_MASK;
+
     switch (opcode & OPCODE_MASK) {
         case 0b00:
             strcpy(translation, "add ");
-            
+            fill(&translation, opcode);
+            break;
+        case 0b01:
+            strcpy(translation, "mov ");
+            fill(&translation, opcode);
+        case 0b10:
+
+
     }
 }
 
 char * compile(struct Program program) {
     struct String nasm = init();
+    struct Vector vec = init_vec();
 
+    delete_vec(vec);
 }

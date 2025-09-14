@@ -21,6 +21,10 @@ unsigned int pop(struct Vector vec) {
     return vec[--vec.size];
 }
 
+void clear_vec(struct Vector vec) {
+    vec.size = 0;
+}
+
 void delete_vec(struct Vector vec) {
     free(vec.data);
 }

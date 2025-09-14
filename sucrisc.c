@@ -17,9 +17,6 @@ unsigned short value(short opcode) {
     else // Raw regnum
         tmp = registers[regnum];
 
-    if (opcode & OPCODE_MASK) { // jmp instruction
-        tmp %= 256; // If using regnum, short jumps are only 1 byte
-    }
     return tmp + opcode & OFFSET_MASK - 4; // Offset it, subtract 4 always so it can be negative.
 }
 
