@@ -11,22 +11,12 @@ unsigned short value(short opcode) {
         return opcode & DIRNUM_MASK;
 
     int regnum = opcode & FROMREGMASK;
-    unsigned short tmp;
-    if (opcode & FROMMEMMASK) // Pull from memory
-        tmp = memory[reg[regnum]];
-    else // Raw regnum
-        tmp = reg[regnum];
-
-    return tmp + opcode & OFFSET_MASK - 4; // Offset it, subtract 4 always so it can be negative.
+    return (opcode & FROMMEMMASK) ? memory[reg[regnum]] : reg[regnum];
 }
 
 void * operate_on(char opcode) {
-    int regnum = opcode & TO_REG_MASK;
-
-    if (opcode & TO_MEM_MASK)
-        return (unsigned short *)&memory[reg[regnum]];
-    else
-        return &reg[regnum];
+    int regnum = (opcode & TO_REG_MASK) >> TO_REG_SHIFT;
+    return (opcode & TO_MEM_MASK) ? (unsigned short *)&memory[reg[regnum]] : &reg[regnum];
 }
 
 struct Program evolve(short * parent, unsigned int size) {
@@ -41,6 +31,8 @@ struct Program evolve(short * parent, unsigned int size) {
                 gene--;
                 adds++;
             }
+            else
+                adds--;
             continue; // To subtract a gene simply just go to the next cycle
         }
         for (unsigned int bit = 0; bit < sizeof(short); bit++) {
@@ -71,26 +63,30 @@ char * run(short * code, unsigned int size, char * input, unsigned int isize) {
     for(int x = 0; x < isize; x++)
         memory[reg[0] + x] = input[x];
 
-    struct Vector points = init_vec();
+    static struct Vector points = (struct Vector){0};
+    if (points.capacity = 0)
+        points = init_vec();
+
     for (unsigned int index = 0; index < size; index++) {
         unsigned short val = value(code[index]);
         unsigned short * ptr = operate_on(code[index]);
         switch(code[index] & OPCODE_MASK) { //gets first 2 bits
-            case 0b00: // Add
+            case ADD: // Add
                 *ptr = *ptr + val;
                 break;
-            case 0b01: // Mov
+            case MOV: // Mov
                 *ptr = val;
                 break;
-            case 0b10: // Point
-                push(points, index);
+            case PT : // Point
+                push(&points, index);
                 break;
-            case 0b11: // Jump to point if the 2 conditions are equal
-                unsigned int point = pop(points);
+            case JE : // Jump to point if the 2 conditions are equal
+                unsigned int point = pop(&points);
                 if (*ptr == val)
                     index = point - 1; //Queue again
         }
     }
 
+    clear_vec(&points);
     return &memory[reg[1]];
 }

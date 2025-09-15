@@ -1,5 +1,11 @@
 risc: sucrisc.o main.o compiler.o vector.o
-	gcc -flto sucrisc.o main.o compiler.o vector.o
+	gcc -flto sucrisc.o main.o compiler.o vector.o -o risc
+
+compiler: standalone.o compiler.o vector.o
+	gcc -flto standalone.o compiler.o vector.o -o compiler
+
+standalone.o: standalone.c
+	gcc -c -O3 -g standalone.c
 
 compiler.o: compiler.c
 	gcc -c -O3 -g compiler.c
