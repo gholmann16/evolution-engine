@@ -12,9 +12,9 @@
 #define NUM_CHILD NUM_WIN * NUM_WIN
 #define NUM_GRAND NUM_CHILD / NUM_WIN
 
-#define DEFAULT_RANDOMNESS 550
+#define DEFAULT_RANDOMNESS 1050
 int randomness = DEFAULT_RANDOMNESS;
-unsigned short memory[65536];
+unsigned char memory[65536];
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -25,7 +25,7 @@ int compare_code(struct Program first, struct Program second) {
     if (first.size != second.size)
         return 1;
     for (int i = 0; i < first.size; i++)
-        if (first.code[i] != second.code[i])
+        if (first.code[i].raw != second.code[i].raw)
             return 1;
     return 0;
 }
@@ -54,8 +54,14 @@ int main() {
 
     // Set the default
     for(int ancestor = 0; ancestor < NUM_WIN; ancestor++) {
-        parent[ancestor].code = malloc(sizeof(short));
-        parent[ancestor].code[0] = 0b0111000001000010;
+        parent[ancestor].code = malloc(sizeof(union Operation));
+        parent[ancestor].code[0] = (union Operation) {
+            .opcode = MOVM,
+            .to_reg = 0, // Starts holding value of 0
+            .or_num = true,
+            .fr_mem = true, // Ignored anyway
+            .number = 'B',
+        };
         parent[ancestor].size = 1;
     }
 

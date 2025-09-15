@@ -6,12 +6,16 @@
 
 int main() {
     struct Program test = {
-        .code = malloc(3 * sizeof(short)),
-        .size = 3,
+        .code = malloc(1 * sizeof(union Operation)),
+        .size = 1,
     };
-    test.code[0] = 0b0101000001000010;
-    test.code[1] = 0b0101000100000001;
-    test.code[2] = 0b0110000100000000;
+    test.code[0] = (union Operation) {
+        .opcode = MOVM,
+        .to_reg = 0, // Starts holding value of 0
+        .or_num = true,
+        .fr_mem = true, // Ignored anyway
+        .number = 'B',
+    };
     char * code = compile(test);
     printf(code);
     free(code);

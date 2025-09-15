@@ -1,31 +1,35 @@
-#define OPCODE_MASK 0b1100000000000000 // First 2 bits
-#define TO_MEM_MASK 0b0010000000000000 // Push to register memory
-#define OR_NUM_MASK 0b0001000000000000 // Does it come from a number (origin number mask)
-#define TO_REG_MASK 0b0000111100000000 // Operating register
-#define FROMMEMMASK 0b0000000010000000 // Pull from register memory?
-#define USELESSMASK 0b0000000001110000 // What numerical offset
-#define FROMREGMASK 0b0000000000001111 // What is the operand register
-#define DIRNUM_MASK 0b0000000011111111 // Direct number
-#define MEMREG_MASK 0b0010000010000000 // Test what combination of register and memory op it is
+union Operation {
+    unsigned short raw;
+    struct {
+        unsigned short opcode : 3;
+        unsigned short to_reg : 3; // Register on which memory to operate on
+        unsigned short or_num : 1; // Does it come from a number (origin number mask)
+        unsigned short fr_mem : 1; // Pull from register memory (if not from number)
+        union { // Could be a numerical value or a register + useless
+            unsigned short number : 8; // Operand, data being used 
+            struct { // payload bit field
+                unsigned char useles : 5;
+                unsigned char fr_reg : 3; // Register data is coming from
+            };
+        };
+    };
+};
 
-#define MEM_TO_MEM 0b0010000010000000 // Operating on memory from memory (8 bit each)
-#define MEM_TO_REG 0b0010000000000000 // Operating on register from memory (8 bit needs to go to 16)
-#define REG_TO_MEM 0b0000000010000000 // Operating on memory from register (16 bit needs to go to 8)
-#define REG_TO_REG 0b0000000000000000 // Operating on register from register (16 bit each)
 
-#define TO_REG_SHIFT 8
-
-#define ADD 0b0000000000000000
-#define MOV 0b0100000000000000
-#define PT  0b1000000000000000
-#define JE  0b1100000000000000
+#define ADD  0b000
+#define MOV  0b001
+#define PT   0b010
+#define JE   0b011
+#define ADDM 0b100
+#define MOVM 0b101
+#define NOP  0b110
+#define JEM  0b111
 
 struct Program {
-    unsigned short * code;
+    union Operation * code;
     unsigned int size;
     unsigned int score;
 };
 
-char * run(short * code, unsigned int size, char * input, unsigned int isize);
-struct Program evolve(short * code, unsigned int size);
-int validate(char * code, unsigned int size);
+char * run(union Operation * code, unsigned int size, char * input, unsigned int isize);
+struct Program evolve(union Operation * parent, unsigned int size);

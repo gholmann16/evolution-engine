@@ -5,16 +5,16 @@ compiler: standalone.o compiler.o vector.o
 	gcc -flto standalone.o compiler.o vector.o -o compiler
 
 standalone.o: standalone.c
-	gcc -c -O3 -g standalone.c
+	gcc -Wall -c -O3 -g standalone.c
 
 compiler.o: compiler.c
-	gcc -c -O3 -g compiler.c
+	gcc -Wall -c -O3 -g compiler.c
 
 vector.o: vector.c
-	gcc -c -O3 -g vector.c
+	gcc -Wall -c -O3 -g vector.c
 
 sucrisc.o: sucrisc.c
-	gcc -c -O3 -g sucrisc.c
+	gcc -Wall -c -O3 -g sucrisc.c
 
 fast: brainfuck.o main.o generator.o
 	gcc -flto main.o brainfuck.o generator.o
@@ -23,13 +23,13 @@ fast: brainfuck.o main.o generator.o
 # 	gcc -c -g game.c
 
 main.o: main.c
-	gcc -c -O3 -g main.c 
+	gcc -Wall -c -O3 -g main.c 
 
 brainfuck.o: brainfuck.c
-	gcc -c -O3 -g brainfuck.c
+	gcc -Wall -c -O3 -g brainfuck.c
 
 generator.o: generator.c
-	gcc -c -O3 -g generator.c
+	gcc -Wall -c -O3 -g generator.c
 
 clean:
 	rm *.o

@@ -23,56 +23,61 @@ struct String init() {
 #define WORD 1
 #define BYTE 2
 
-char * registers[][16] = {
-    {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"},
-    {"ax", "bx", "cx", "dx", "si", "di", "bp", "sp", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w"},
-    {"al", "bl", "cl", "dl", "sil", "dil", "bpl", "spl", "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b"},
+char * registers[][16] = { // Registers rax, rdx, rdi, rsi, r8, r9, r10 used in syscalls, r11 used as tmp
+    {"rbx", "rcx", "rbp", "rsp", "r12", "r13", "r14", "r15"},
+    {"bx", "cx", "bp", "sp", "r12w", "r13w", "r14w", "r15w"},
+    {"bl", "cl", "bpl", "spl", "r12b", "r13b", "r14b", "r15b"},
 };
 
-void fill(char ** dirop, short opcode, char * operation) {
+void fill(char ** dirop, union Operation op, char * operation) {
     char * translation = *dirop;
-    int toreg = (opcode & TO_REG_MASK) >> TO_REG_SHIFT;
-    if (opcode & OR_NUM_MASK)
-        sprintf(translation, (opcode & TO_MEM_MASK) ? "%s byte[memory + %s], %d\n" : "%s %s, %d\n", 
-            operation, registers[(opcode & TO_MEM_MASK) ? QWORD : WORD][toreg], opcode & DIRNUM_MASK);
-
-    int fromreg = opcode & FROMREGMASK;
-
-    switch (opcode & MEMREG_MASK) {
-        case MEM_TO_MEM:
-            sprintf(translation, "%s byte[memory + %s], byte[memory + %s]\n", 
-                operation, registers[QWORD][toreg], registers[QWORD][fromreg]);
+    if (op.or_num) {
+        sprintf(translation, (op.opcode > 3) ? "%s byte[memory + %s], %d\n" : "%s %s, %d\n", 
+            operation, registers[(op.opcode > 3) ? QWORD : WORD][op.to_reg], op.number);
+        return;
+    }
+    
+    switch (op.fr_mem*2 + (op.opcode > 3)) {
+        case 0b11: // Memory to memory is not supported in x86
+            sprintf(translation, "mov r11b, byte[memory + %s]\n%s byte[memory + %s], r11b\n",
+                registers[QWORD][op.fr_reg], operation, registers[QWORD][op.to_reg]);
             break;
-        case MEM_TO_REG:
-            sprintf(translation, "mov byte[conversion], 0\nmov byte[conversion+1], byte[memory + %s]\n%s %s, word[conversion]\n", 
-                registers[QWORD][fromreg], operation, registers[WORD][toreg]);
+        case 0b10: // Can't add one byte to a register without zero extending
+            sprintf(translation, "movzx r11w, byte[memory + %s]\n%s %s, r11b\n", 
+                registers[QWORD][op.fr_reg], operation, registers[WORD][op.to_reg]);
             break;
-        case REG_TO_MEM:
+        case 0b01:
             sprintf(translation, "%s byte[memory + %s], %s\n",
-                operation, registers[QWORD][toreg], registers[BYTE][fromreg]);
+                operation, registers[QWORD][op.to_reg], registers[BYTE][op.fr_reg]);
             break;
-        case REG_TO_REG:
-            sprintf(translation, "%s %s, %s\n", operation, registers[WORD][toreg], registers[WORD][fromreg]);
+        case 0b00:
+            sprintf(translation, "%s %s, %s\n", operation, registers[WORD][op.to_reg], registers[WORD][op.fr_reg]);
+            break;
     }
 }
 
-char * translate(char ** write, short opcode, size_t * count) {
+char * translate(char ** write, union Operation op, unsigned int * count) {
     char * translation = *write;
 
-    switch (opcode & OPCODE_MASK) {
+    switch (op.opcode) {
         case ADD:
-            fill(write, opcode, "add");
+        case ADDM:
+            fill(write, op, "add");
             break;
         case MOV:
-            fill(write, opcode, "mov");
+        case MOVM:
+            fill(write, op, "mov");
             break;
-        case PT :
-            sprintf(translation, "point_%d:\n", *count--);
+        case PT:
+            sprintf(translation, "point_%d:\n", *count++);
             break;
-        case JE :
-            fill(write, opcode, "jmp");
+        case NOP:
+            break;
+        case JE:
+        case JEM:
+            fill(write, op, "jmp");
             char tmp[32];
-            sprintf(tmp, "je point_%d\n");
+            sprintf(tmp, "je point_%d\n", *count--);
             strcat(translation, tmp);
             break;
     }
@@ -84,7 +89,7 @@ char * compile_core(struct Program program) {
     struct String nasm = init();
     char * line_data = malloc(256);
 
-    size_t count = 0;
+    unsigned int count = 0;
     for (size_t line = 0; line < program.size; line++)
         append(&nasm, translate(&line_data, program.code[line], &count));
 
@@ -106,23 +111,27 @@ char * begin_boiler =
     "syscall\n"
     "cmp rax, -1\n"
     "je fail\n"
-    "xor rax, rax\nxor rbx, rbx\nxor rcx, rcx\nxor rdx, rdx\n"
-    "xor rsi, rsi\nxor rdi, rdi\nxor rbp, rbp\nxor rsp, rsp\n"
-    "xor r8, r8\nxor r9, r9\nxor r10, r10\nxor r11, r11\n"
-    "xor r12, r12\nxor r13, r13\nxor r14, r14\nxor r15, r15\n"
+    "xor rbx, rbx\n"
+    "xor rcx, rcx\n"
+    "xor rbp, rbp\n"
+    "xor rsp, rsp\n"
+    "xor r12, r12\n"
+    "xor r13, r13\n"
+    "xor r14, r14\n"
+    "xor r15, r15\n"
     ;
 
 char * end_boiler =
     "mov rax, 1\n" // Write result to terminal
     "mov rdi, 1\n"
     "mov rsi, memory\n"
-    "add rsi, rbx\n" // Get data from register essentially
-    "mov rcx, rsi\n"
+    "add rsi, rbx\n" // Get data from register 0 essentially
+    "mov r11, rsi\n"
     "mov rdx, 0\n" // Count the bytes in memory
     "continue:\n"
-    "cmp byte[rcx], 0\n"
+    "cmp byte[r11], 0\n"
     "je done\n"
-    "add rcx, 1\n" // Move index forward
+    "add r11, 1\n" // Move index forward
     "add rdx, 1\n" // Add to count
     "jmp continue\n"
     "done:\n"
