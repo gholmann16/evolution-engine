@@ -4,7 +4,7 @@
 
 extern char memory[65536];
 extern int randomness;
-unsigned short registers[16];
+unsigned short reg[16];
 
 unsigned short value(short opcode) {
     if (opcode & OR_NUM_MASK) // Get direct number
@@ -13,9 +13,9 @@ unsigned short value(short opcode) {
     int regnum = opcode & FROMREGMASK;
     unsigned short tmp;
     if (opcode & FROMMEMMASK) // Pull from memory
-        tmp = memory[registers[regnum]];
+        tmp = memory[reg[regnum]];
     else // Raw regnum
-        tmp = registers[regnum];
+        tmp = reg[regnum];
 
     return tmp + opcode & OFFSET_MASK - 4; // Offset it, subtract 4 always so it can be negative.
 }
@@ -24,9 +24,9 @@ void * operate_on(char opcode) {
     int regnum = opcode & TO_REG_MASK;
 
     if (opcode & TO_MEM_MASK)
-        return (unsigned short *)&memory[registers[regnum]];
+        return (unsigned short *)&memory[reg[regnum]];
     else
-        return &registers[regnum];
+        return &reg[regnum];
 }
 
 struct Program evolve(short * parent, unsigned int size) {
@@ -60,7 +60,7 @@ struct Program evolve(short * parent, unsigned int size) {
 
 void clear() {
     for (int i = 0; i < 16; i++)
-        registers[i] = 0;
+        reg[i] = 0;
     for (int j = 0; j < sizeof(memory); j++)
         memory[j] = 0;
 }
@@ -69,9 +69,9 @@ char * run(short * code, unsigned int size, char * input, unsigned int isize) {
 
     clear();
     for(int x = 0; x < isize; x++)
-        memory[registers[0] + x] = input[x];
+        memory[reg[0] + x] = input[x];
 
-    struct Vector points = init();
+    struct Vector points = init_vec();
     for (unsigned int index = 0; index < size; index++) {
         unsigned short val = value(code[index]);
         unsigned short * ptr = operate_on(code[index]);
@@ -92,5 +92,5 @@ char * run(short * code, unsigned int size, char * input, unsigned int isize) {
         }
     }
 
-    return &memory[registers[1]];
+    return &memory[reg[1]];
 }

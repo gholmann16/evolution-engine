@@ -2,7 +2,7 @@ struct Vector {
     unsigned int * data;
     size_t size;
     size_t capacity;
-}
+};
 
 struct Vector init_vec();
 void push(struct Vector vec, unsigned int add);

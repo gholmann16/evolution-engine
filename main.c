@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "sucrisc.h"
+#include "compiler.h"
 
 #define EXECUTIONS 100000
 #define WORST 50000
@@ -64,7 +65,7 @@ int main() {
         // Evolve from winning pool
         for (int winner = 0; winner < NUM_WIN; winner++) {
             // Keep the winner around so you never regress (agamogenesis)
-            children[winner * NUM_GRAND].code = parent[winner].code;
+            children[winner * NUM_GRAND] = parent[winner];
             for (int grandchild = 1; grandchild < NUM_GRAND; grandchild++)
                 children[winner * NUM_GRAND + grandchild] = evolve(parent[winner].code, parent[winner].size);
         }
@@ -81,9 +82,11 @@ int main() {
             best = children[0].score;
         }
 
-        if (children[0].code)
-            printf("Winner of generation %d with a score of %d is %s (won %d times)\n", 
-                runs, children[0].score, children[0].code, times);
+        printf("Winner of generation %d won with a score of %d! (%d previously wins):\n", runs, children[0].score, times);
+        char * compiled_code = compile_core(children[0]);
+        puts(compiled_code);
+        free(compiled_code);
+
         if (children[0].score == children[0].size) {
             puts("Solved");
             break;
@@ -96,7 +99,7 @@ int main() {
         }
 
         // Get winning pool, shoot for diversity
-        parent[0].code = children[0].code;
+        parent[0] = children[0];
         int found = 1;
         for (int candidate = 1; candidate < NUM_CHILD; candidate++) {
             /* 
@@ -106,8 +109,9 @@ int main() {
              * Conveniently, the worse dna of the batch because the winners will stay winners
              * Frees everything we need, since parent and children share a pool
              */
-            if (found != NUM_WIN && compare_code(children[candidate], parent[found - 1]))
-                parent[found++].code = children[candidate].code;
+            if (found != NUM_WIN && compare_code(children[candidate], parent[found - 1])) {
+                parent[found++] = children[candidate];
+            }
             else
                 free(children[candidate].code);
         }
