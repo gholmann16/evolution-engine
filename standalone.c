@@ -6,10 +6,12 @@
 
 int main() {
     struct Program test = {
-        .code = malloc(sizeof(short)),
-        .size = 1,
+        .code = malloc(3 * sizeof(short)),
+        .size = 3,
     };
-    test.code[0] = 0b0111000001000010;
+    test.code[0] = 0b0101000001000010;
+    test.code[1] = 0b0101000100000001;
+    test.code[2] = 0b0110000100000000;
     char * code = compile(test);
     printf(code);
     free(code);

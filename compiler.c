@@ -19,32 +19,41 @@ struct String init() {
     return (struct String){.contents = calloc(256, sizeof(char)), 256};
 }
 
-char * registers[] = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"};
+#define QWORD 0
+#define WORD 1
+#define BYTE 2
 
-void fill(char ** dirop, short opcode) {
+char * registers[][16] = {
+    {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"},
+    {"ax", "bx", "cx", "dx", "si", "di", "bp", "sp", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w"},
+    {"al", "bl", "cl", "dl", "sil", "dil", "bpl", "spl", "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b"},
+};
+
+void fill(char ** dirop, short opcode, char * operation) {
     char * translation = *dirop;
     int toreg = (opcode & TO_REG_MASK) >> TO_REG_SHIFT;
+    if (opcode & OR_NUM_MASK)
+        sprintf(translation, (opcode & TO_MEM_MASK) ? "%s byte[memory + %s], %d\n" : "%s %s, %d\n", 
+            operation, registers[(opcode & TO_MEM_MASK) ? QWORD : WORD][toreg], opcode & DIRNUM_MASK);
+
     int fromreg = opcode & FROMREGMASK;
 
-    if (opcode & TO_MEM_MASK)
-        strcat(translation, "byte[memory + ");
-    strcat(translation, registers[toreg]);
-    if (opcode & TO_MEM_MASK)
-        strcat(translation, "]");
-    strcat(translation, ", ");
-
-    char val[32];
-    // int offset = ((opcode & OFFSET_MASK) >> OFFSET_SHIFT) - 4;
-
-    if (opcode & OR_NUM_MASK)
-        sprintf(val, "%d", opcode & DIRNUM_MASK);
-    else if (opcode & FROMMEMMASK)
-        sprintf(val, "byte[memory + %s]", registers[fromreg]);
-    else // raw reg
-        sprintf(val, registers[fromreg]);
-
-    strcat(translation, val);
-    strcat(translation, "\n");
+    switch (opcode & MEMREG_MASK) {
+        case MEM_TO_MEM:
+            sprintf(translation, "%s byte[memory + %s], byte[memory + %s]\n", 
+                operation, registers[QWORD][toreg], registers[QWORD][fromreg]);
+            break;
+        case MEM_TO_REG:
+            sprintf(translation, "mov byte[conversion], 0\nmov byte[conversion+1], byte[memory + %s]\n%s %s, word[conversion]\n", 
+                registers[QWORD][fromreg], operation, registers[WORD][toreg]);
+            break;
+        case REG_TO_MEM:
+            sprintf(translation, "%s byte[memory + %s], %s\n",
+                operation, registers[QWORD][toreg], registers[BYTE][fromreg]);
+            break;
+        case REG_TO_REG:
+            sprintf(translation, "%s %s, %s\n", operation, registers[WORD][toreg], registers[WORD][fromreg]);
+    }
 }
 
 char * translate(char ** write, short opcode, size_t * count) {
@@ -52,19 +61,16 @@ char * translate(char ** write, short opcode, size_t * count) {
 
     switch (opcode & OPCODE_MASK) {
         case ADD:
-            strcpy(translation, "add ");
-            fill(write, opcode);
+            fill(write, opcode, "add");
             break;
         case MOV:
-            strcpy(translation, "mov ");
-            fill(write, opcode);
+            fill(write, opcode, "mov");
             break;
         case PT :
             sprintf(translation, "point_%d:\n", *count--);
             break;
         case JE :
-            sprintf(translation, "cmp ");
-            fill(write, opcode);
+            fill(write, opcode, "jmp");
             char tmp[32];
             sprintf(tmp, "je point_%d\n");
             strcat(translation, tmp);
@@ -90,6 +96,7 @@ char * begin_boiler =
     "global _start\n"
     "section .bss\n" // Declare memory in .bss space
     "memory: resb 65536\n" // Automatically set to 0 because in bss
+    "conversion: resb 2\n"
     "section .text\n"
     "_start:\n"
     "mov rax, 0\n" // Read user input to memory

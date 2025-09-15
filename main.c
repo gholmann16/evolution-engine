@@ -5,7 +5,7 @@
 #include "sucrisc.h"
 #include "compiler.h"
 
-#define EXECUTIONS 100000
+#define EXECUTIONS 1
 #define WORST 50000
 
 #define NUM_WIN 100
@@ -55,7 +55,7 @@ int main() {
     // Set the default
     for(int ancestor = 0; ancestor < NUM_WIN; ancestor++) {
         parent[ancestor].code = malloc(sizeof(short));
-        parent[ancestor].code[0] = 0b001100001000010;
+        parent[ancestor].code[0] = 0b0111000001000010;
         parent[ancestor].size = 1;
     }
 
@@ -83,7 +83,7 @@ int main() {
             best = children[0].score;
         }
 
-        printf("Winner of generation %d won with a score of %d! (%d previously wins):\n", runs, children[0].score, times);
+        printf("Winner of generation %d won with a score of %d and size %d! (%d previously wins):\n", runs, children[0].score, children[0].size, times);
         char * compiled_code = compile_core(children[0]);
         printf(compiled_code);
         free(compiled_code);

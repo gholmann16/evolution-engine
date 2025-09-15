@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "sucrisc.h"
 #include "vector.h"
 
@@ -8,15 +9,10 @@ unsigned short reg[16];
 
 unsigned short value(short opcode) {
     if (opcode & OR_NUM_MASK) // Get direct number
-        return opcode & DIRNUM_MASK;
+        return opcode & DIRNUM_MASK; // Essentially a char
 
     int regnum = opcode & FROMREGMASK;
-    return (opcode & FROMMEMMASK) ? memory[reg[regnum]] : reg[regnum];
-}
-
-void * operate_on(char opcode) {
-    int regnum = (opcode & TO_REG_MASK) >> TO_REG_SHIFT;
-    return (opcode & TO_MEM_MASK) ? (unsigned short *)&memory[reg[regnum]] : &reg[regnum];
+    return (opcode & FROMMEMMASK) ? memory[reg[regnum]] : reg[regnum]; //Either char or short
 }
 
 struct Program evolve(short * parent, unsigned int size) {
@@ -69,20 +65,27 @@ char * run(short * code, unsigned int size, char * input, unsigned int isize) {
 
     for (unsigned int index = 0; index < size; index++) {
         unsigned short val = value(code[index]);
-        unsigned short * ptr = operate_on(code[index]);
+        int regnum = (code[index] & TO_REG_MASK) >> TO_REG_SHIFT;
+
         switch(code[index] & OPCODE_MASK) { //gets first 2 bits
             case ADD: // Add
-                *ptr = *ptr + val;
+                if (code[index] & TO_MEM_MASK)
+                    memory[reg[regnum]] += val;
+                else
+                    reg[regnum] += val;
                 break;
             case MOV: // Mov
-                *ptr = val;
+                if (code[index] & TO_MEM_MASK)
+                    memory[reg[regnum]] += val;
+                else
+                    reg[regnum] += val;
                 break;
             case PT : // Point
                 push(&points, index);
                 break;
             case JE : // Jump to point if the 2 conditions are equal
                 unsigned int point = pop(&points);
-                if (*ptr == val)
+                if (((code[index] & TO_MEM_MASK) ? memory[reg[regnum]] : reg[regnum]) == val) //Knows that val can't be a short (less useful)
                     index = point - 1; //Queue again
         }
     }
