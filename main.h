@@ -1,4 +1,4 @@
-#define WORST 50000
+#define WORST 5000000
 
 struct Program {
     void * code;

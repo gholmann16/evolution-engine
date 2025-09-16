@@ -4,7 +4,7 @@
 #include <time.h>
 #include <main.h>
 
-#define EXECUTIONS 10
+#define EXECUTIONS 100000000
 
 #define NUM_WIN 100
 #define NUM_CHILD NUM_WIN * NUM_WIN
@@ -38,28 +38,35 @@ bool compare_code(struct Program first, struct Program second) {
     return false;
 }
 
+char * inputs[] = {"hello brainfuck you got this", "another line of text long", "3rd input and comparing to hash"};
+char * output[] = { "e34c8297bcead2c833764455620e3d395ef346d66aef4dda3c704f55ed1dc29c", 
+                    "4ca9a0e789bbb2aaa5052f61d0f4fbeb99e21ffba1f9926c8a240447d4c50aa3",
+                    "d52db1e96610465aeaf5f6cdd3f913ac85037730226f6066e1e7f96113fbb484"};
 unsigned int score(struct Program program) {
-    unsigned char memory[65536] = {0};
-    char * input = "Macy";
 
-    for(int x = 0; x < strlen(input); x++)
-        memory[x] = input[x];
+    int sc;
 
-    char * response = run(program, memory);
-    char * word = "Bitter";
+    for (int i = 0; i < 3; i++) {
+        unsigned char memory[65536] = {0};
+        
+        for(int x = 0; x < strlen(inputs[i]); x++)
+            memory[x] = inputs[i][x];
 
-    if (response == NULL)
-        return WORST;
+        char * response = run(program, memory);
 
-    int diff = strlen(word) - strlen(response);
-    int sc = abs(diff) * 255;
-    int compare = (diff > 0) ? strlen(response) : strlen(word);
-    for (int i = 0; i < compare; i++)
-        sc += abs(word[i] - response[i]);
+        if (response == NULL)
+            return WORST;
 
-    sc *= 50;
+        int diff = strlen(output[i]) - strlen(response);
+        sc = abs(diff) * 255;
+        int compare = (diff > 0) ? strlen(response) : strlen(output[i]);
+        for (int j = 0; j < compare; j++)
+            sc += abs(output[i][j] - response[j]);
 
-    return sc;
+        sc *= 50;
+    }
+
+    return sc + program.size;
 }
 
 struct Program get_default () {
@@ -67,7 +74,8 @@ struct Program get_default () {
 }
 
 int main() {
-    srand(time(NULL));
+    // srand(time(NULL));
+    srand(50);
     struct Program children[NUM_CHILD] = {0};
     struct Program parent[NUM_WIN] = {0};
     size_t randomness = DEFAULT_RANDOMNESS;

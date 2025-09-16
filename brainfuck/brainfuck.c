@@ -102,6 +102,7 @@ char * run(struct Program prog, unsigned char memory[65536]) {
         }
     }
 
+    output[index] = 0;
     strcpy((char *)memory, output);
     return (char *)memory;
 }
