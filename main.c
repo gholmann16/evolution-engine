@@ -4,8 +4,9 @@
 #include <time.h>
 #include "sucrisc.h"
 #include "compiler.h"
+#include "vector.h"
 
-#define EXECUTIONS 1
+#define EXECUTIONS 100000
 #define WORST 50000
 
 #define NUM_WIN 100
@@ -15,6 +16,22 @@
 #define DEFAULT_RANDOMNESS 1050
 int randomness = DEFAULT_RANDOMNESS;
 unsigned char memory[65536];
+struct Vector points;
+struct Program def_prog = {0};
+
+union Operation * cpy_code(struct Program old) {
+    size_t buf_size = sizeof(union Operation) * old.size;
+    union Operation * ret = malloc(buf_size); 
+    memcpy(ret, old.code, buf_size);
+    return ret;
+}
+
+void set_default(struct Program new_def) {
+    free(def_prog.code);
+    def_prog.code = cpy_code(new_def);
+    def_prog.size = new_def.size;
+    def_prog.score = new_def.score;
+}
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -48,23 +65,7 @@ void score(struct Program * program) {
 
     sc *= 50;
 
-    program->score = sc + program->size;
-}
-
-struct Program def_prog = {0};
-
-union Operation * cpy_code(struct Program old) {
-    size_t buf_size = sizeof(union Operation) * old.size;
-    union Operation * ret = malloc(buf_size); 
-    memcpy(ret, old.code, buf_size);
-    return ret;
-}
-
-void set_default(struct Program new_def) {
-    free(def_prog.code);
-    def_prog.code = cpy_code(new_def);
-    def_prog.size = new_def.size;
-    def_prog.score = new_def.score;
+    program->score = sc - program->size;
 }
 
 struct Program get_default () {
@@ -72,7 +73,7 @@ struct Program get_default () {
 }
 
 int main() {
-
+    points = init_vec();
     srand(time(NULL));
     struct Program children[NUM_CHILD] = {0};
     struct Program parent[NUM_WIN] = {0};
@@ -151,5 +152,6 @@ int main() {
     for (int to_free = 0; to_free < NUM_WIN; to_free++)
         free(parent[to_free].code);
 
+    delete_vec(points);
     return 0;
 }

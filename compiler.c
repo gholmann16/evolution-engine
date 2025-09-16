@@ -2,17 +2,23 @@
 #include <string.h>
 #include <stdio.h>
 #include "sucrisc.h"
+#include "vector.h"
+
+extern struct Vector points;
 
 struct String {
     char * contents;
     size_t capacity;
 };
 
-void append(struct String * nasm, char * addition) {
+bool append(struct String * nasm, char * addition) {
+    if (addition == NULL)
+        return false;
     if (strlen(nasm->contents) + strlen(addition) + 1 > nasm->capacity) // Must have 1 more for ending \0, so >=
         nasm->contents = realloc(nasm->contents, (strlen(nasm->contents) + strlen(addition))*2);
 
     strcat(nasm->contents, addition);
+    return true;
 }
 
 struct String init() {
@@ -58,6 +64,7 @@ void fill(char ** dirop, union Operation op, char * operation) {
 
 char * translate(char ** write, union Operation op, unsigned int * count) {
     char * translation = *write;
+    char tmp[32];
 
     switch (op.opcode) {
         case ADD:
@@ -69,19 +76,24 @@ char * translate(char ** write, union Operation op, unsigned int * count) {
             fill(write, op, "mov");
             break;
         case PT:
-            sprintf(translation, "point_%d:\n", *count++);
+            push(&points, *count);
+            sprintf(tmp, "point_%d:\n", *count);
+            strcpy(translation, tmp);
             break;
         case NOP:
             break;
         case JE:
         case JEM:
             fill(write, op, "jmp");
-            char tmp[32];
-            sprintf(tmp, "je point_%d\n", *count--);
-            strcat(translation, tmp);
+            unsigned int last = pop(&points);
+            if (last == -1)
+                return NULL;
+            sprintf(tmp, "je point_%d\n", last);
+            strcpy(translation, tmp);
             break;
     }
 
+    *count = *count + 1;
     return translation;
 }
 
@@ -90,8 +102,12 @@ char * compile_core(struct Program program) {
     char * line_data = malloc(256);
 
     unsigned int count = 0;
+    clear_vec(&points);
     for (size_t line = 0; line < program.size; line++)
-        append(&nasm, translate(&line_data, program.code[line], &count));
+        if(append(&nasm, translate(&line_data, program.code[line], &count)) == false) {
+            sprintf(nasm.contents, "Error with operation %d, too many jumps for amount of points.\n", count);
+            break;
+        }
 
     free(line_data);
     return nasm.contents;

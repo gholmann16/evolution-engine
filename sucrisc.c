@@ -3,8 +3,11 @@
 #include "sucrisc.h"
 #include "vector.h"
 
+#define MAX_RUNTIME 100000
+
 extern unsigned char memory[65536];
 extern int randomness;
+extern struct Vector points;
 unsigned short reg[16];
 
 struct Program evolve(union Operation * parent, unsigned int size) {
@@ -14,8 +17,8 @@ struct Program evolve(union Operation * parent, unsigned int size) {
     union Operation * child = malloc(sizeof(union Operation) * (size + max_adds));
 
     for (unsigned int gene = 0; gene < size; gene++) {
-        if (!(rand() % randomness)) { // 1 / randomness chance you or subtract a gene
-            if(rand() % 2 && size+adds < size) { // 1/2 chance you add a gene, generate random number and rewind gene so it still adds the next one
+        if (rand() % randomness < 2) { // 2 / randomness chance you or subtract a gene
+            if(rand() % 2 && size < size+max_adds) { // 1/2 chance you add a gene, generate random number and rewind gene so it still adds the next one
                 child[index++].raw = rand();
                 gene--;
                 adds++;
@@ -53,11 +56,12 @@ char * run(union Operation * code, unsigned int size, char * input, unsigned int
     for(int x = 0; x < isize; x++)
         memory[x] = input[x];
 
-    static struct Vector points = (struct Vector){0};
-    if (points.capacity == 0)
-        points = init_vec();
-
+    clear_vec(&points);
+    unsigned int runtime = 0;
     for (unsigned int index = 0; index < size; index++) {
+        if (++runtime == MAX_RUNTIME)
+            return NULL;
+
         unsigned short val = value(code[index]);
 
         switch(code[index].opcode) { //gets first 2 bits
@@ -66,11 +70,13 @@ char * run(union Operation * code, unsigned int size, char * input, unsigned int
                 break;
             case ADDM:
                 memory[reg[code[index].to_reg]] += val;
+                break;
             case MOV: // Mov
-                reg[code[index].to_reg] += val;
+                reg[code[index].to_reg] = val;
                 break;
             case MOVM:
-                memory[reg[code[index].to_reg]] += val;
+                memory[reg[code[index].to_reg]] = val;
+                break;
             case PT: // Point
                 push(&points, index);
                 break;
