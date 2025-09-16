@@ -1,24 +1,33 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "sucrisc.h"
+#include "../main.h"
 #include "vector.h"
 
 #define MAX_RUNTIME 100000
 
-extern unsigned char memory[65536];
-extern int randomness;
-extern struct Vector points;
-unsigned short reg[16];
+union Operation def_op = {
+    .opcode = MOVM,
+    .to_reg = 0, // Starts holding value of 0
+    .or_num = true,
+    .fr_mem = true, // Ignored anyway
+    .number = 'B',
+};
 
-struct Program evolve(union Operation * parent, unsigned int size) {
+struct Program ancestor_prog() {
+    return (struct Program){.code = &def_op, .size = sizeof(union Operation), .score = WORST};
+}
+
+struct Program evolve(struct Program prog, size_t randomness) {
+    union Operation * parent = prog.code;
     unsigned int index = 0;
-    unsigned int max_adds = size + 100;
+    unsigned int max_adds = 100;
     int adds = 0;
-    union Operation * child = malloc(sizeof(union Operation) * (size + max_adds));
+    union Operation * child = malloc(prog.size + 100*sizeof(union Operation));
 
-    for (unsigned int gene = 0; gene < size; gene++) {
+    for (unsigned int gene = 0; gene < (prog.size / sizeof(union Operation)); gene++) {
         if (rand() % randomness < 2) { // 2 / randomness chance you or subtract a gene
-            if(rand() % 2 && size < size+max_adds) { // 1/2 chance you add a gene, generate random number and rewind gene so it still adds the next one
+            if(rand() % 2 && adds < max_adds) { // 1/2 chance you add a gene, generate random number and rewind gene so it still adds the next one
                 child[index++].raw = rand();
                 gene--;
                 adds++;
@@ -34,35 +43,30 @@ struct Program evolve(union Operation * parent, unsigned int size) {
         // After potential changing code, randomize
         child[index++] = parent[gene];
     }
-    return (struct Program){.code = child, .size = size+adds};
+    return (struct Program){.code = child, .size = prog.size + adds*sizeof(union Operation)};
 }
 
-void clear() {
-    for (int i = 0; i < 16; i++)
-        reg[i] = 0;
-    for (int j = 0; j < sizeof(memory); j++)
-        memory[j] = 0;
-}
-
-unsigned short value(union Operation op) {
+unsigned short value(union Operation op, unsigned char memory[65536], unsigned short reg[16], unsigned int size, unsigned int index) {
     if (op.or_num) // Get direct number
         return op.number; // Essentially a char
-
     return (op.fr_mem) ? memory[reg[op.fr_reg]] : reg[op.fr_reg]; //Either char or short
 }
 
-char * run(union Operation * code, unsigned int size, char * input, unsigned int isize) {
-    clear();
-    for(int x = 0; x < isize; x++)
-        memory[x] = input[x];
+char * run(struct Program prog, unsigned char memory[65536]) {
+    union Operation * code = prog.code;
+    unsigned short reg[16] = {0};
 
+    static struct Vector points = {0};
+    if (points.capacity == 0)
+        points = init_vec();
     clear_vec(&points);
+
     unsigned int runtime = 0;
-    for (unsigned int index = 0; index < size; index++) {
+    for (unsigned int index = 0; index < (prog.size / sizeof(union Operation)); index++) {
         if (++runtime == MAX_RUNTIME)
             return NULL;
 
-        unsigned short val = value(code[index]);
+        unsigned short val = value(code[index], memory, reg, prog.size, index);
 
         switch(code[index].opcode) { //gets first 2 bits
             case ADD: // Add
@@ -99,6 +103,5 @@ char * run(union Operation * code, unsigned int size, char * input, unsigned int
         }
     }
 
-    clear_vec(&points);
     return (char *)&memory[reg[0]];
 }

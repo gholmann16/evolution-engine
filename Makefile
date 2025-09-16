@@ -1,35 +1,40 @@
+CFLAGS := -Wall -c -O3 -g -I.
+LDLIBS := -flto
+
 risc: sucrisc.o main.o compiler.o vector.o
-	gcc -flto sucrisc.o main.o compiler.o vector.o -o risc
+	gcc $(LDLIBS) sucrisc.o main.o compiler.o vector.o -o risc
+
+brainfuck: main.o brainfuck.o generator.o
+	gcc $(LDLIBS) main.o brainfuck.o generator.o
 
 compiler: standalone.o compiler.o vector.o
-	gcc -flto standalone.o compiler.o vector.o -o compiler
+	gcc $(LDLIBS) standalone.o compiler.o vector.o -o compiler
 
-standalone.o: standalone.c
-	gcc -Wall -c -O3 -g standalone.c
+# Objects
 
-compiler.o: compiler.c
-	gcc -Wall -c -O3 -g compiler.c
+main.o: main.c
+	gcc $(CFLAGS) main.c 
 
-vector.o: vector.c
-	gcc -Wall -c -O3 -g vector.c
+vector.o: sucrisc/vector.c
+	gcc $(CFLAGS) sucrisc/vector.c
 
-sucrisc.o: sucrisc.c
-	gcc -Wall -c -O3 -g sucrisc.c
+standalone.o: sucrisc/standalone.c
+	gcc $(CFLAGS) sucrisc/standalone.c
 
-fast: brainfuck.o main.o generator.o
-	gcc -flto main.o brainfuck.o generator.o
+compiler.o: sucrisc/compiler.c
+	gcc $(CFLAGS) sucrisc/compiler.c
+
+sucrisc.o: sucrisc/sucrisc.c
+	gcc $(CFLAGS) sucrisc/sucrisc.c
+
+brainfuck.o: brainfuck/brainfuck.c
+	gcc $(CFLAGS) brainfuck/brainfuck.c
+
+generator.o: brainfuck/generator.c
+	gcc $(CFLAGS) brainfuck/generator.c
 
 # game.o: game.c
 # 	gcc -c -g game.c
-
-main.o: main.c
-	gcc -Wall -c -O3 -g main.c 
-
-brainfuck.o: brainfuck.c
-	gcc -Wall -c -O3 -g brainfuck.c
-
-generator.o: generator.c
-	gcc -Wall -c -O3 -g generator.c
 
 clean:
 	rm *.o

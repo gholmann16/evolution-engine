@@ -1,10 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "sucrisc.h"
+#include "../main.h"
 #include "vector.h"
-
-extern struct Vector points;
+#include "sucrisc.h"
 
 struct String {
     char * contents;
@@ -62,7 +61,7 @@ void fill(char ** dirop, union Operation op, char * operation) {
     }
 }
 
-char * translate(char ** write, union Operation op, unsigned int * count) {
+char * translate(char ** write, union Operation op, unsigned int line, struct Vector * points) {
     char * translation = *write;
     char tmp[32];
 
@@ -76,16 +75,17 @@ char * translate(char ** write, union Operation op, unsigned int * count) {
             fill(write, op, "mov");
             break;
         case PT:
-            push(&points, *count);
-            sprintf(tmp, "point_%d:\n", *count);
+            push(points, line);
+            sprintf(tmp, "point_%d:\n", line);
             strcpy(translation, tmp);
             break;
         case NOP:
+            strcpy(translation, "nop");
             break;
         case JE:
         case JEM:
             fill(write, op, "jmp");
-            unsigned int last = pop(&points);
+            unsigned int last = pop(points);
             if (last == -1)
                 return NULL;
             sprintf(tmp, "je point_%d\n", last);
@@ -93,19 +93,21 @@ char * translate(char ** write, union Operation op, unsigned int * count) {
             break;
     }
 
-    *count = *count + 1;
     return translation;
 }
 
-char * compile_core(struct Program program) {
+char * debug(struct Program program) {
     struct String nasm = init();
     char * line_data = malloc(256);
 
-    unsigned int count = 0;
+    static struct Vector points = {0};
+    if (points.capacity == 0)
+        points = init_vec();
     clear_vec(&points);
-    for (size_t line = 0; line < program.size; line++)
-        if(append(&nasm, translate(&line_data, program.code[line], &count)) == false) {
-            sprintf(nasm.contents, "Error with operation %d, too many jumps for amount of points.\n", count);
+
+    for (unsigned int line = 0; line < (program.size / sizeof(union Operation)); line++)
+        if(append(&nasm, translate(&line_data, ((union Operation *)program.code)[line], line, &points)) == false) {
+            sprintf(nasm.contents, "Error with operation %d, too many jumps for amount of points.\n", line);
             break;
         }
 
@@ -165,7 +167,7 @@ char * end_boiler =
 
 char * compile(struct Program program) {
     struct String nasm = init();
-    char * code = compile_core(program);
+    char * code = debug(program);
 
     append(&nasm, begin_boiler);
     append(&nasm, code);

@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include "sucrisc.h"
 #include "compiler.h"
-#include "vector.h"
 
 int main() {
     struct Program test = {

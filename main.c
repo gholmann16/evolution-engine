@@ -2,35 +2,26 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "sucrisc.h"
-#include "compiler.h"
-#include "vector.h"
+#include <main.h>
 
-#define EXECUTIONS 100000
-#define WORST 50000
+#define EXECUTIONS 10
 
 #define NUM_WIN 100
 #define NUM_CHILD NUM_WIN * NUM_WIN
 #define NUM_GRAND NUM_CHILD / NUM_WIN
 
 #define DEFAULT_RANDOMNESS 1050
-int randomness = DEFAULT_RANDOMNESS;
-unsigned char memory[65536];
-struct Vector points;
 struct Program def_prog = {0};
-
-union Operation * cpy_code(struct Program old) {
-    size_t buf_size = sizeof(union Operation) * old.size;
-    union Operation * ret = malloc(buf_size); 
-    memcpy(ret, old.code, buf_size);
-    return ret;
-}
 
 void set_default(struct Program new_def) {
     free(def_prog.code);
-    def_prog.code = cpy_code(new_def);
+    def_prog.code = memcpy(malloc(new_def.size), new_def.code, new_def.size);
     def_prog.size = new_def.size;
     def_prog.score = new_def.score;
+}
+
+void free_default() {
+    free(def_prog.code);
 }
 
 int compare_ratings(const void * first, const void * second) {
@@ -38,24 +29,27 @@ int compare_ratings(const void * first, const void * second) {
     return ((struct Program *) first)->score - ((struct Program *) second)->score; 
 }
 
-int compare_code(struct Program first, struct Program second) {
+bool compare_code(struct Program first, struct Program second) {
     if (first.size != second.size)
-        return 1;
+        return true;
     for (int i = 0; i < first.size; i++)
-        if (first.code[i].raw != second.code[i].raw)
-            return 1;
-    return 0;
+        if (((char *)first.code)[i] != ((char *)second.code)[i]) // Compare as strings rather than voids
+            return true;
+    return false;
 }
 
-void score(struct Program * program) {
-    char * question = "Macy";
-    char * response = run(program->code, program->size, question, strlen(question));
+unsigned int score(struct Program program) {
+    unsigned char memory[65536] = {0};
+    char * input = "Macy";
+
+    for(int x = 0; x < strlen(input); x++)
+        memory[x] = input[x];
+
+    char * response = run(program, memory);
     char * word = "Bitter";
 
-    if (response == NULL) {
-        program->score = WORST;
-        return;
-    }
+    if (response == NULL)
+        return WORST;
 
     int diff = strlen(word) - strlen(response);
     int sc = abs(diff) * 255;
@@ -65,28 +59,20 @@ void score(struct Program * program) {
 
     sc *= 50;
 
-    program->score = sc - program->size;
+    return sc;
 }
 
 struct Program get_default () {
-    return (struct Program) {.code = cpy_code(def_prog), .size = def_prog.size,};
+    return (struct Program) {.code = memcpy(malloc(def_prog.size), def_prog.code, def_prog.size), .size = def_prog.size};
 }
 
 int main() {
-    points = init_vec();
     srand(time(NULL));
     struct Program children[NUM_CHILD] = {0};
     struct Program parent[NUM_WIN] = {0};
+    size_t randomness = DEFAULT_RANDOMNESS;
 
-    union Operation def_op = {
-        .opcode = MOVM,
-        .to_reg = 0, // Starts holding value of 0
-        .or_num = true,
-        .fr_mem = true, // Ignored anyway
-        .number = 'B',
-    };
-
-    set_default((struct Program){.code = &def_op, .size = 1, .score = WORST});
+    set_default(ancestor_prog());
     // Set the default
     for(int ancestor = 0; ancestor < NUM_WIN; ancestor++)
         parent[ancestor] = get_default();
@@ -99,11 +85,10 @@ int main() {
             // Keep the winner around so you never regress (agamogenesis)
             children[winner * NUM_GRAND] = parent[winner];
             for (int grandchild = 1; grandchild < NUM_GRAND; grandchild++)
-                children[winner * NUM_GRAND + grandchild] = evolve(parent[winner].code, parent[winner].size);
+                children[winner * NUM_GRAND + grandchild] = evolve(parent[winner], randomness);
         }
-        for (int i = 0; i < NUM_CHILD; i++) {
-            score(&children[i]);
-        }
+        for (int i = 0; i < NUM_CHILD; i++)
+            children[i].score = score(children[i]);
 
         qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
 
@@ -115,7 +100,7 @@ int main() {
         }
 
         printf("Winner of generation %d won with a score of %d and size %d! (%d previously wins):\n", runs, children[0].score, children[0].size, times);
-        char * compiled_code = compile_core(children[0]);
+        char * compiled_code = debug(children[0]);
         printf(compiled_code);
         free(compiled_code);
 
@@ -151,7 +136,6 @@ int main() {
 
     for (int to_free = 0; to_free < NUM_WIN; to_free++)
         free(parent[to_free].code);
-
-    delete_vec(points);
+    free_default();
     return 0;
 }
