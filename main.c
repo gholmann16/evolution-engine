@@ -35,6 +35,11 @@ void score(struct Program * program) {
     char * response = run(program->code, program->size, question, strlen(question));
     char * word = "Bitter";
 
+    if (response == NULL) {
+        program->score = WORST;
+        return;
+    }
+
     int diff = strlen(word) - strlen(response);
     int sc = abs(diff) * 255;
     int compare = (diff > 0) ? strlen(response) : strlen(word);
@@ -46,26 +51,45 @@ void score(struct Program * program) {
     program->score = sc + program->size;
 }
 
+struct Program def_prog = {0};
+
+union Operation * cpy_code(struct Program old) {
+    size_t buf_size = sizeof(union Operation) * old.size;
+    union Operation * ret = malloc(buf_size); 
+    memcpy(ret, old.code, buf_size);
+    return ret;
+}
+
+void set_default(struct Program new_def) {
+    free(def_prog.code);
+    def_prog.code = cpy_code(new_def);
+    def_prog.size = new_def.size;
+    def_prog.score = new_def.score;
+}
+
+struct Program get_default () {
+    return (struct Program) {.code = cpy_code(def_prog), .size = def_prog.size,};
+}
+
 int main() {
 
     srand(time(NULL));
     struct Program children[NUM_CHILD] = {0};
     struct Program parent[NUM_WIN] = {0};
 
-    // Set the default
-    for(int ancestor = 0; ancestor < NUM_WIN; ancestor++) {
-        parent[ancestor].code = malloc(sizeof(union Operation));
-        parent[ancestor].code[0] = (union Operation) {
-            .opcode = MOVM,
-            .to_reg = 0, // Starts holding value of 0
-            .or_num = true,
-            .fr_mem = true, // Ignored anyway
-            .number = 'B',
-        };
-        parent[ancestor].size = 1;
-    }
+    union Operation def_op = {
+        .opcode = MOVM,
+        .to_reg = 0, // Starts holding value of 0
+        .or_num = true,
+        .fr_mem = true, // Ignored anyway
+        .number = 'B',
+    };
 
-    int best = WORST;
+    set_default((struct Program){.code = &def_op, .size = 1, .score = WORST});
+    // Set the default
+    for(int ancestor = 0; ancestor < NUM_WIN; ancestor++)
+        parent[ancestor] = get_default();
+
     int times = 0;
 
     for(int runs = 0; runs < EXECUTIONS; runs++) {
@@ -82,11 +106,11 @@ int main() {
 
         qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
 
-        if (children[0].score == best)
+        if (children[0].score == def_prog.score)
             times++;
         else {
             times = 0;
-            best = children[0].score;
+            set_default(children[0]);
         }
 
         printf("Winner of generation %d won with a score of %d and size %d! (%d previously wins):\n", runs, children[0].score, children[0].size, times);
@@ -94,15 +118,14 @@ int main() {
         printf(compiled_code);
         free(compiled_code);
 
+        randomness = DEFAULT_RANDOMNESS - times;
         if (children[0].score == children[0].size) {
             puts("Solved");
-            break;
+            runs = EXECUTIONS;
         }
-
-        randomness = DEFAULT_RANDOMNESS - times;
-        if (randomness == 50) {
+        else if (randomness == 50) {
             puts("I give up");
-            break;
+            runs = EXECUTIONS;
         }
 
         // Get winning pool, shoot for diversity
@@ -116,12 +139,13 @@ int main() {
              * Conveniently, the worse dna of the batch because the winners will stay winners
              * Frees everything we need, since parent and children share a pool
              */
-            if (found != NUM_WIN && compare_code(children[candidate], parent[found - 1])) {
+            if (found < NUM_WIN && compare_code(children[candidate], parent[found - 1]))
                 parent[found++] = children[candidate];
-            }
             else
                 free(children[candidate].code);
         }
+        while (found < NUM_WIN)
+            parent[found++] = get_default();
     }
 
     for (int to_free = 0; to_free < NUM_WIN; to_free++)

@@ -49,7 +49,6 @@ unsigned short value(union Operation op) {
 }
 
 char * run(union Operation * code, unsigned int size, char * input, unsigned int isize) {
-
     clear();
     for(int x = 0; x < isize; x++)
         memory[x] = input[x];
@@ -79,10 +78,15 @@ char * run(union Operation * code, unsigned int size, char * input, unsigned int
                 break;
             case JE : // Jump to point if the 2 conditions are equal
                 unsigned int point = pop(&points);
+                if (point == -1)
+                    return NULL;
                 if (reg[code[index].to_reg] == val)
                     index = point - 1; //Queue again
+                break;
             case JEM:
                 unsigned int pointm = pop(&points);
+                if (pointm == -1)
+                    return NULL;
                 if(memory[reg[code[index].to_reg]] == val)
                     index = pointm - 1; //Queue again
                 break;

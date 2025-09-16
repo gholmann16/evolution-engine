@@ -14,6 +14,8 @@ void push(struct Vector * vec, unsigned int add) {
 }
 
 unsigned int pop(struct Vector * vec) {
+    if (vec->size == 0)
+        return -1;
     return vec->data[--vec->size];
 }
 
