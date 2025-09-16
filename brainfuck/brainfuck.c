@@ -2,14 +2,23 @@
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
+#include <main.h>
 
 #define MAX_RUNTIME 100000
 #define MAX_OUTPUT 1024
 
-int validate(char * code) {
+struct Program ancestor_prog() {
+    return (struct Program){.code = ".[>.]", .size = 5};
+}
+
+char * debug(struct Program prog) {
+    return strdup(prog.code);
+}
+
+bool validate(struct Program prog) {
     int open = 0;
-    for (int x = 0; x < strlen(code); x++) {
-        switch (code[x]) {
+    for (int x = 0; x < prog.size; x++) {
+        switch (((char *)prog.code)[x]) {
             case '[':
                 open++;
                 break;
@@ -18,34 +27,28 @@ int validate(char * code) {
                 break;
         }
         if (open < 0)
-            return 1; // Mismatching close error
+            return true; // Mismatching close error
     }
     if (open != 0) // Mismatching bracket error
-        return 2;
+        return true;
 
-    return 0;
+    return false;
 }
 
-char * run(char * code, char * mem, unsigned short size) {
-
-    if(validate(code) != 0)
+char * run(struct Program prog, unsigned char memory[65536]) {
+    if(validate(prog) == true)
         return NULL; //Punishment for failing
 
-    char memory[65536] = {0};
-    char * output = calloc(MAX_OUTPUT, sizeof(char));
+    char output[MAX_OUTPUT];
+    char * code = prog.code;
+
     unsigned int index = 0;
     unsigned short location = 0;
     unsigned int runtime = 0;
 
-    for (int a = 0; a < size; a++) {
-        memory[a] = mem[a];
-    }
-
-    for (int x = 0; x < strlen(code); x++) {
-        if (++runtime == MAX_RUNTIME) {
-            free(output);
+    for (int x = 0; x < prog.size; x++) {
+        if (++runtime == MAX_RUNTIME)
             return NULL;
-        }
 
         switch(code[x]) {
             case '+': 
@@ -85,10 +88,8 @@ char * run(char * code, char * mem, unsigned short size) {
                 }
                 break;
             case '.':
-                if (index == MAX_OUTPUT) {
-                    free(output);
+                if (index == MAX_OUTPUT)
                     return NULL;
-                }
                 output[index] = memory[location];
                 index++;
                 break;
@@ -101,5 +102,6 @@ char * run(char * code, char * mem, unsigned short size) {
         }
     }
 
-    return output;
+    strcpy((char *)memory, output);
+    return (char *)memory;
 }

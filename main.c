@@ -101,7 +101,7 @@ int main() {
 
         printf("Winner of generation %d won with a score of %d and size %d! (%d previously wins):\n", runs, children[0].score, children[0].size, times);
         char * compiled_code = debug(children[0]);
-        printf(compiled_code);
+        puts(compiled_code);
         free(compiled_code);
 
         randomness = DEFAULT_RANDOMNESS - times;

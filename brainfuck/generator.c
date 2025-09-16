@@ -1,23 +1,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-extern int randomness;
+#include <main.h>
 
 char rand_dna() {
     char * chars = "+-<>[].";
     return chars[rand() % 7];
 }
 
-char * evolve(char * parent) {
+struct Program evolve(struct Program prog, size_t randomness) {
+    char * parent = prog.code;
+
     int additions = rand() % 20;
-    size_t new_len = strlen(parent) + additions;
+    size_t new_len = prog.size + additions;
 
     char * child = malloc(new_len + 1); //In case it fills, the 0
     int added = 0;
     size_t index = 0;
 
-    for (int gene = 0; gene < strlen(parent); gene++) {
+    for (int gene = 0; gene < prog.size; gene++) {
         int decision = rand() % randomness;
         switch (decision) {
             case 0: // 1 % chance you remove code
@@ -26,19 +27,21 @@ char * evolve(char * parent) {
             case 1: // 1 % chance you add code
                 if (added < additions) {
                     added++;
+                    gene--;
                     child[index++] = rand_dna();
                 }
-            default: // 95 % chance you do nothing (slightly more because additions go here after)
-                child[index++] = parent[gene];
                 break;
             case 2:
             case 3: // 3% chance you modify
             case 4:
                 child[index++] = rand_dna();
                 break;
+            default: // 95 % chance you do nothing (slightly more because additions go here after)
+                child[index++] = parent[gene];
+                break;
         }
     }
 
     child[index] = 0;
-    return child;
+    return (struct Program){.code = child, .size = index};
 }

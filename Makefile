@@ -1,11 +1,11 @@
 CFLAGS := -Wall -c -O3 -g -I.
 LDLIBS := -flto
 
+fast: main.o brainfuck.o generator.o
+	gcc $(LDLIBS) main.o brainfuck.o generator.o -o fast
+
 risc: sucrisc.o main.o compiler.o vector.o
 	gcc $(LDLIBS) sucrisc.o main.o compiler.o vector.o -o risc
-
-brainfuck: main.o brainfuck.o generator.o
-	gcc $(LDLIBS) main.o brainfuck.o generator.o
 
 compiler: standalone.o compiler.o vector.o
 	gcc $(LDLIBS) standalone.o compiler.o vector.o -o compiler
