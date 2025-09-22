@@ -4,11 +4,12 @@
 #include <stdio.h>
 #include <main.h>
 
-#define MAX_RUNTIME 100000
-#define MAX_OUTPUT 1024
-
 struct Program ancestor_prog() {
-    return (struct Program){.code = ".[>.]", .size = 5};
+    char * code = ".[>.]";
+    struct Program def = {0};
+    strcpy(def.code, code);
+    def.size = strlen(code);
+    return def;
 }
 
 char * debug(struct Program prog) {
@@ -18,7 +19,7 @@ char * debug(struct Program prog) {
 bool validate(struct Program prog) {
     int open = 0;
     for (int x = 0; x < prog.size; x++) {
-        switch (((char *)prog.code)[x]) {
+        switch (prog.code[x]) {
             case '[':
                 open++;
                 break;
@@ -35,22 +36,24 @@ bool validate(struct Program prog) {
     return false;
 }
 
-char * run(struct Program prog, unsigned char memory[65536]) {
-    if(validate(prog) == true)
-        return NULL; //Punishment for failing
+void run(struct Program * prog, char input[256], char output[256]) {
+    if(validate(*prog) == true) {
+        prog->runtime = MAX_RUNTIME;
+        return; // Punishment for failing
+    }
 
-    char output[MAX_OUTPUT];
-    char * code = prog.code;
+    unsigned char memory[65536] = {0};
+    for (int i = 0; i < strlen(input); i++)
+        memory[i] = input[i];
 
-    unsigned int index = 0;
+    unsigned char index = 0;
     unsigned short location = 0;
-    unsigned int runtime = 0;
 
-    for (int x = 0; x < prog.size; x++) {
-        if (++runtime == MAX_RUNTIME)
-            return NULL;
+    for (int x = 0; x < prog->size; x++) {
+        if (++prog->runtime == MAX_RUNTIME)
+            return;
 
-        switch(code[x]) {
+        switch(prog->code[x]) {
             case '+': 
                 memory[location]++;
                 break;
@@ -68,9 +71,9 @@ char * run(struct Program prog, unsigned char memory[65536]) {
                     int brackets = 1;
                     while (brackets) {
                         x++;
-                        if (code[x] == '[')
+                        if (prog->code[x] == '[')
                             brackets++;
-                        else if (code[x] == ']')
+                        else if (prog->code[x] == ']')
                             brackets--;
                     }
                 }
@@ -80,29 +83,27 @@ char * run(struct Program prog, unsigned char memory[65536]) {
                     int rev = 1;
                     while(rev) {
                         x--;
-                        if (code[x] == ']')
+                        if (prog->code[x] == ']')
                             rev++;
-                        else if (code[x] == '[')
+                        else if (prog->code[x] == '[')
                             rev--;
                     }
                 }
                 break;
             case '.':
-                if (index == MAX_OUTPUT)
-                    return NULL;
-                output[index] = memory[location];
-                index++;
+                output[index++] = memory[location];
+                break;
+            case '0':
+                memory[location] = 0;
                 break;
             default:
                 puts("Unknown brainfuck command detected");
-                printf("chracter hex: 0x%x\n", code[x]);
+                printf("chracter hex: 0x%x\n", prog->code[x]);
                 puts("Code:");
-                puts(code);
+                puts(prog->code);
                 exit(-1);
         }
     }
 
     output[index] = 0;
-    strcpy((char *)memory, output);
-    return (char *)memory;
 }

@@ -1,12 +1,16 @@
-#define WORST 5000000
+#define WORST       5000000
+#define MAX_RUNTIME 500000
+#define MAX_SIZE    5000
 
 struct Program {
-    void * code;
-    unsigned int size;
-    unsigned int score;
+    char code[1000]; // No 0 at the end, don't use strlen
+    size_t size;
+    size_t runtime;
+    size_t score;
 };
 
-char * run(struct Program prog, unsigned char memory[65536]); // Should be non freeable memory, too many allocs otherwise
+// Input should be read only
+void run(struct Program * prog, char input[256], char output[256]); // Should be non freeable memory, too many allocs otherwise
 char * debug(struct Program prog); // Should be an allocated string
 
 struct Program ancestor_prog();
