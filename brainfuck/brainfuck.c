@@ -2,7 +2,7 @@
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
-#include <main.h>
+#include <evolver.h>
 
 struct Program ancestor_prog() {
     char * code = ".[>.]";

@@ -1,3 +1,4 @@
+#include <stddef.h>
 #define WORST       5000000
 #define MAX_RUNTIME 500000
 #define MAX_SIZE    5000
@@ -8,6 +9,8 @@ struct Program {
     size_t runtime;
     size_t score;
 };
+
+int evolver();
 
 // Input should be read only
 void run(struct Program * prog, char input[256], char output[256]); // Should be non freeable memory, too many allocs otherwise

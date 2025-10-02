@@ -1,8 +1,13 @@
 CFLAGS := -Wall -c -O3 -g -I.
 LDLIBS := -flto
 
-fast: main.o brainfuck.o generator.o
-	gcc $(LDLIBS) main.o brainfuck.o generator.o -o fast
+gui: CFLAGS += `pkg-config --cflags libadwaita-1`
+gui: LDLIBS += `pkg-config --libs libadwaita-1`
+gui: main.o evolver.o brainfuck.o generator.o
+	gcc $(LDLIBS) main.o evolver.o brainfuck.o generator.o -o gui
+
+fast: cli.o evolver.o brainfuck.o generator.o
+	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o -o fast
 
 risc: sucrisc.o main.o compiler.o vector.o
 	gcc $(LDLIBS) sucrisc.o main.o compiler.o vector.o -o risc
@@ -14,6 +19,9 @@ compiler: standalone.o compiler.o vector.o
 
 main.o: main.c
 	gcc $(CFLAGS) main.c 
+
+evolver.o: evolver.c
+	gcc $(CFLAGS) evolver.c
 
 vector.o: sucrisc/vector.c
 	gcc $(CFLAGS) sucrisc/vector.c
