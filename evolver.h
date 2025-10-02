@@ -12,10 +12,13 @@ struct Program {
 
 int evolver();
 
-// Input should be read only
-void run(struct Program * prog, char input[256], char output[256]); // Should be non freeable memory, too many allocs otherwise
-char * debug(struct Program prog); // Should be an allocated string
+// Executing
+void run(struct Program * prog, char input[256], char output[256]); // input read only, output should be non freeable memory, too many allocs otherwise
 
+// Evolving
 struct Program ancestor_prog();
 struct Program evolve(struct Program parent, size_t randomness); 
+
+// Utility
+char * debug(struct Program prog); // Should be an allocated string
 char * compile(struct Program program); // Allocated string ready to be passed to assembler

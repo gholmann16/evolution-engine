@@ -1,13 +1,13 @@
-CFLAGS := -Wall -c -O3 -g -I.
-LDLIBS := -flto
+CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
+LDLIBS := -flto -lcrypto
+
+fast: cli.o evolver.o brainfuck.o generator.o
+	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o -o fast
 
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`
 gui: main.o evolver.o brainfuck.o generator.o
 	gcc $(LDLIBS) main.o evolver.o brainfuck.o generator.o -o gui
-
-fast: cli.o evolver.o brainfuck.o generator.o
-	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o -o fast
 
 risc: sucrisc.o main.o compiler.o vector.o
 	gcc $(LDLIBS) sucrisc.o main.o compiler.o vector.o -o risc

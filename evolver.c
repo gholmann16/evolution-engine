@@ -4,10 +4,11 @@
 #include <time.h>
 #include <unistd.h>
 #include <evolver.h>
+#include <openssl/md5.h>
 
-#define EXECUTIONS 100000000
+#define EXECUTIONS 100
 
-#define NUM_WIN 100
+#define NUM_WIN 10
 #define NUM_CHILD NUM_WIN * NUM_WIN
 #define NUM_GRAND NUM_CHILD / NUM_WIN
 
@@ -27,40 +28,45 @@ bool compare_code(struct Program first, struct Program second) {
     return false;
 }
 
-char * inputs[256] = {"hello brainfuck you got this", "another line of text long", "3rd input and comparing to hash"};
-char * outputs[] = { "e34c8297bcead2c833764455620e3d395ef346d66aef4dda3c704f55ed1dc29c", 
-                    "4ca9a0e789bbb2aaa5052f61d0f4fbeb99e21ffba1f9926c8a240447d4c50aa3",
-                    "d52db1e96610465aeaf5f6cdd3f913ac85037730226f6066e1e7f96113fbb484"};
-void score(struct Program * program) {
+void fill_string(char input[256]) {
+    for (int i = 0; i < 255; i++) {
+        input[i] = rand() % 256;
+    }
+    input[255] = 0;
+}
 
+void score(struct Program * program) {
     int sc;
     program->runtime = 0;
+    char input[256];
     char output[256];
+    char expected[16];
 
-    for (int i = 0; i < 3; i++) {
-        run(program, inputs[i], output);
+    for (int i = 0; i < 10; i++) {
+        fill_string(input);
+        MD5((const unsigned char *)input, strlen(input), (unsigned char *)expected);
+        run(program, input, output);
 
         if (program->runtime == MAX_RUNTIME) {
             program->score = WORST;
             return;
         }
 
-        int diff = strlen(outputs[i]) - strlen(output);
+        int diff = sizeof(expected) - strlen(output);
         sc = abs(diff) * 255;
-        int compare = (diff > 0) ? strlen(output) : strlen(outputs[i]);
+        int compare = (diff > 0) ? strlen(output) : sizeof(expected);
         for (int j = 0; j < compare; j++)
-            sc += abs(outputs[i][j] - output[j]);
+            sc += abs(expected[j] - output[j]);
     }
     if (sc)
         program->score = sc * 50 + program->runtime + program->size * 2;
     else
-        program->score = 0; // If no difference it's goolden
+        program->score = 0; // If no difference it's golden
 }
 
 int evolver() {
     // srand(time(NULL));
     srand(50);
-    printf("Size = %ld\n", sizeof(struct Program));
     struct Program * children = malloc(sizeof(struct Program) * NUM_CHILD);
     struct Program parent[NUM_WIN] = {0};
     size_t randomness = DEFAULT_RANDOMNESS;
