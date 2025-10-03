@@ -3,15 +3,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
 #include <evolver.h>
-#include <openssl/md5.h>
+#include <openssl/md4.h>
 
-#define EXECUTIONS 100
-
-#define NUM_WIN 10
-#define NUM_CHILD NUM_WIN * NUM_WIN
-#define NUM_GRAND NUM_CHILD / NUM_WIN
-
+#define EXECUTIONS 10000000
+#define NUM_WIN 50
 #define DEFAULT_RANDOMNESS 1050
 
 int compare_ratings(const void * first, const void * second) {
@@ -36,15 +33,15 @@ void fill_string(char input[256]) {
 }
 
 void score(struct Program * program) {
-    int sc;
+    int sc = 0;
     program->runtime = 0;
     char input[256];
     char output[256];
     char expected[16];
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 3; i++) {
         fill_string(input);
-        MD5((const unsigned char *)input, strlen(input), (unsigned char *)expected);
+        MD4((const unsigned char *)input, strlen(input), (unsigned char *)expected);
         run(program, input, output);
 
         if (program->runtime == MAX_RUNTIME) {
@@ -52,81 +49,122 @@ void score(struct Program * program) {
             return;
         }
 
-        int diff = sizeof(expected) - strlen(output);
-        sc = abs(diff) * 255;
-        int compare = (diff > 0) ? strlen(output) : sizeof(expected);
-        for (int j = 0; j < compare; j++)
+        for (int j = 0; j < 16; j++)
             sc += abs(expected[j] - output[j]);
     }
     if (sc)
-        program->score = sc * 50 + program->runtime + program->size * 2;
+        program->score = sc * 50 + program->runtime;// + program->size * 2;
     else
         program->score = 0; // If no difference it's golden
 }
 
-int evolver() {
-    // srand(time(NULL));
-    srand(50);
-    struct Program * children = malloc(sizeof(struct Program) * NUM_CHILD);
-    struct Program parent[NUM_WIN] = {0};
-    size_t randomness = DEFAULT_RANDOMNESS;
+// Returns true if repeat
+bool generation(struct State state) {
+    // Determinism
+    srand(state.seed + state.runs);
 
-    // Set the default
-    for(int ancestor = 0; ancestor < NUM_WIN; ancestor++)
-        parent[ancestor] = ancestor_prog();
+    // Evolve from winning pool
+    for (int winner = 0; winner < state.total_winners; winner++) {
+        // Keep the winner around so you never regress (agamogenesis)
+        state.children[winner * state.total_winners] = state.parent[winner];
+        for (int grandchild = 1; grandchild < state.total_winners; grandchild++)
+            state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions);
+    }
+    for (int i = 0; i < state.total_winners * state.total_winners; i++)
+        score(&(state.children[i]));
 
-    int times = 0;
+    qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
 
-    for(int runs = 0; runs < EXECUTIONS; runs++) {
-        // Evolve from winning pool
-        for (int winner = 0; winner < NUM_WIN; winner++) {
-            // Keep the winner around so you never regress (agamogenesis)
-            children[winner * NUM_GRAND] = parent[winner];
-            for (int grandchild = 1; grandchild < NUM_GRAND; grandchild++)
-                children[winner * NUM_GRAND + grandchild] = evolve(parent[winner], randomness);
-        }
-        for (int i = 0; i < NUM_CHILD; i++)
-            score(&children[i]);
+    // Get winning pool, shoot for diversity
+    state.parent[0] = state.children[0];
+    int found = 1;
+    for (int candidate = 1; candidate < state.total_winners * state.total_winners; candidate++) {
+        /* 
+            * If we haven't found all winners, and this one is not identical to the previous winner
+            * Can still have duplicates probably but not all duplicates, at least some genetic variety
+            * If they're all the same hypothetically, then some left over dna from last generation would stay
+            * Conveniently, the worse dna of the batch because the winners will stay winners
+            * Frees everything we need, since parent and children share a pool
+            */
+        if (found < state.total_winners && compare_code(state.children[candidate], state.parent[found - 1]))
+            state.parent[found++] = state.children[candidate];
+    }
+    while (found < state.total_winners)
+        state.parent[found++] = state.parent[0];
 
-        qsort(children, NUM_CHILD, sizeof(struct Program), compare_ratings);
+    return (state.children[0].score == state.parent[0].score) ? true : false;
+}
 
-        if (children[0].score == parent[0].score)
-            times++;
-        else
-            times = 0;
+// Returns false = end program
+bool cli_interpret(struct State state) {
+    printf("Winner of generation %d won with a score of %ld, size %ld, runtime %ld! (%d previously wins) (seed is %d):\n", 
+        state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed);
+    write(1, state.children[0].code, state.children[0].size);
+    puts("");
 
-        printf("Winner of generation %d won with a score of %ld, size %ld, runtime %ld! (%d previously wins):\n", runs, children[0].score, children[0].size, children[0].runtime, times);
-        write(1, children[0].code, children[0].size);
-        puts("");
-
-        randomness = DEFAULT_RANDOMNESS - times;
-        if (children[0].score == 0) {
-            puts("Solved");
-            runs = EXECUTIONS;
-        }
-        else if (randomness == 50) {
-            puts("I give up");
-            runs = EXECUTIONS;
-        }
-
-        // Get winning pool, shoot for diversity
-        parent[0] = children[0];
-        int found = 1;
-        for (int candidate = 1; candidate < NUM_CHILD; candidate++) {
-            /* 
-             * If we haven't found all winners, and this one is not identical to the previous winner
-             * Can still have duplicates probably but not all duplicates, at least some genetic variety
-             * If they're all the same hypothetically, then some left over dna from last generation would stay
-             * Conveniently, the worse dna of the batch because the winners will stay winners
-             * Frees everything we need, since parent and children share a pool
-             */
-            if (found < NUM_WIN && compare_code(children[candidate], parent[found - 1]))
-                parent[found++] = children[candidate];
-        }
-        while (found < NUM_WIN)
-            parent[found++] = parent[0];
+    if (state.children[0].score == 0) {
+        puts("Solved");
+        return false;
+    }
+    else if (state.def_rand - state.repetitions == 50) {
+        puts("I give up");
+        return false;
     }
 
-    free(children);
+    return true;
+}
+
+void save(struct State state) {
+    FILE * out = fopen("save.bin", "wb");
+    fwrite(&state, sizeof(struct State), 1, out);
+    fwrite(state.parent, sizeof(struct Program), state.total_winners, out);
+    fclose(out);
+}
+
+struct State load(char * file) {
+    FILE * in = fopen(file, "rb");
+    struct State revived;
+    fread(&revived, sizeof(struct State), 1, in);
+    revived.parent = malloc(sizeof(struct Program) * revived.total_winners);
+    revived.children = malloc(sizeof(struct Program) * revived.total_winners * revived.total_winners);
+    fread(revived.parent, sizeof(struct Program), revived.total_winners, in);
+    fclose(in);
+    return revived;
+}
+
+struct State def_state() {
+    return (struct State) {
+        .seed = 50,
+        .total_winners = NUM_WIN,
+        .def_rand = DEFAULT_RANDOMNESS,
+        .parent = malloc(sizeof(struct Program) * NUM_WIN),
+        .children = malloc(sizeof(struct Program) * NUM_WIN * NUM_WIN),
+    };
+}
+
+static volatile bool running = true;
+
+void quit(int sig) {
+    running = false;
+}
+
+int evolver(struct State state) {
+    signal(SIGINT, quit);
+    // Set the default
+    for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
+        state.parent[ancestor] = ancestor_prog();
+
+    while (running && state.runs < EXECUTIONS) {
+        bool repeat = generation(state);
+        state.runs += EXECUTIONS * !cli_interpret(state);
+        state.repetitions = repeat*state.repetitions + repeat; // Add 1 if it repeated
+        state.runs++;
+    }
+
+    if (running == false)
+        save(state);
+
+    free(state.parent);
+    free(state.children);
     return 0;
 }

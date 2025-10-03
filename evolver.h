@@ -10,7 +10,20 @@ struct Program {
     size_t score;
 };
 
-int evolver();
+struct State {
+    int seed;
+    int runs;
+    int total_winners;
+    int def_rand;
+    int repetitions;
+    struct Program * parent; // struct Program * total_winners
+    struct Program * children; // struct Program * total_winners^2
+};
+
+// Running
+struct State load(char * file);
+struct State def_state();
+int evolver(struct State);
 
 // Executing
 void run(struct Program * prog, char input[256], char output[256]); // input read only, output should be non freeable memory, too many allocs otherwise

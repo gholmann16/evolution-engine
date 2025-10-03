@@ -6,3 +6,4 @@ compiler
 *.asm
 fast
 gui
+*.bin
