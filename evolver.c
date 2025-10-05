@@ -32,17 +32,13 @@ void fill_string(char input[256]) {
     input[255] = 0;
 }
 
-void score(struct Program * program) {
+void score(struct Program * program, char inputs[3][256], char outputs[3][16]) {
     int sc = 0;
     program->runtime = 0;
-    char input[256];
     char output[256];
-    char expected[16];
 
     for (int i = 0; i < 3; i++) {
-        fill_string(input);
-        MD4((const unsigned char *)input, strlen(input), (unsigned char *)expected);
-        run(program, input, output);
+        run(program, inputs[i], output);
 
         if (program->runtime == MAX_RUNTIME) {
             program->score = WORST;
@@ -50,7 +46,7 @@ void score(struct Program * program) {
         }
 
         for (int j = 0; j < 16; j++)
-            sc += abs(expected[j] - output[j]);
+            sc += abs(outputs[i][j] - output[j]);
     }
     if (sc)
         program->score = sc * 50 + program->runtime;// + program->size * 2;
@@ -70,10 +66,19 @@ bool generation(struct State state) {
         for (int grandchild = 1; grandchild < state.total_winners; grandchild++)
             state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions);
     }
+
+    char inputs[3][256];
+    char outputs[3][16];
+    for (int which = 0; which < 3; which++) {
+        fill_string(inputs[which]);
+        MD4((const unsigned char *)inputs[which], strlen(inputs[which]), (unsigned char *)outputs[which]);
+    }
+
     for (int i = 0; i < state.total_winners * state.total_winners; i++)
-        score(&(state.children[i]));
+        score(&(state.children[i]), inputs, outputs);
 
     qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
+    bool rep = (state.children[0].score == state.parent[0].score) ? true : false;
 
     // Get winning pool, shoot for diversity
     state.parent[0] = state.children[0];
@@ -92,7 +97,7 @@ bool generation(struct State state) {
     while (found < state.total_winners)
         state.parent[found++] = state.parent[0];
 
-    return (state.children[0].score == state.parent[0].score) ? true : false;
+    return rep;
 }
 
 // Returns false = end program
