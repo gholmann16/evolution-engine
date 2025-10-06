@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <evolver.h>
-#include <openssl/md4.h>
+#include <crc8.h>
 
 #define EXECUTIONS 10000000
 #define NUM_WIN 50
@@ -32,7 +32,7 @@ void fill_string(char input[256]) {
     input[255] = 0;
 }
 
-void score(struct Program * program, char inputs[3][256], char outputs[3][16]) {
+void score(struct Program * program, char inputs[3][256], char outputs[3]) {
     int sc = 0;
     program->runtime = 0;
     char output[256];
@@ -45,8 +45,7 @@ void score(struct Program * program, char inputs[3][256], char outputs[3][16]) {
             return;
         }
 
-        for (int j = 0; j < 16; j++)
-            sc += abs(outputs[i][j] - output[j]);
+        sc += abs(outputs[i] - output[0]);
     }
     if (sc)
         program->score = sc * 50 + program->runtime;// + program->size * 2;
@@ -68,10 +67,10 @@ bool generation(struct State state) {
     }
 
     char inputs[3][256];
-    char outputs[3][16];
+    char outputs[3];
     for (int which = 0; which < 3; which++) {
         fill_string(inputs[which]);
-        MD4((const unsigned char *)inputs[which], strlen(inputs[which]), (unsigned char *)outputs[which]);
+        outputs[which] = crc8(inputs[which]);
     }
 
     for (int i = 0; i < state.total_winners * state.total_winners; i++)
