@@ -7,9 +7,9 @@
 #include <evolver.h>
 #include <crc8.h>
 
-#define EXECUTIONS 10000000
-#define NUM_WIN 50
-#define DEFAULT_RANDOMNESS 1050
+#define EXECUTIONS 10
+#define NUM_WIN 10
+#define DEFAULT_RANDOMNESS 10050
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -36,6 +36,8 @@ void score(struct Program * program, char inputs[3][256], char outputs[3]) {
     int sc = 0;
     program->runtime = 0;
     char output[256];
+    static int runnum = -1;
+    runnum++;
 
     for (int i = 0; i < 3; i++) {
         run(program, inputs[i], output);
@@ -48,9 +50,11 @@ void score(struct Program * program, char inputs[3][256], char outputs[3]) {
         sc += abs(outputs[i] - output[0]);
     }
     if (sc)
-        program->score = sc * 50 + program->runtime;// + program->size * 2;
+        program->score = WORST;
+        // program->score = sc * 50 + program->runtime;// + program->size * 2;
     else
-        program->score = 0; // If no difference it's golden
+        program->score = program->runtime + program->size; // If no difference it's golden
+    printf("Contestor %d has score of %ld\n", runnum, program->score);
 }
 
 // Returns true if repeat
@@ -68,9 +72,11 @@ bool generation(struct State state) {
 
     char inputs[3][256];
     char outputs[3];
+    char tmp[256];
     for (int which = 0; which < 3; which++) {
         fill_string(inputs[which]);
-        outputs[which] = crc8(inputs[which]);
+        memcpy(tmp, inputs[which], 256);
+        outputs[which] = crc8(tmp);
     }
 
     for (int i = 0; i < state.total_winners * state.total_winners; i++)
@@ -79,6 +85,7 @@ bool generation(struct State state) {
     qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
     bool rep = (state.children[0].score == state.parent[0].score) ? true : false;
 
+    printf("state of generation:\n1: %ld\n2: %ld\n3: %ld\n4: %ld\n5: %ld\n", state.children[0].score, state.children[1].score, state.children[2].score, state.children[3].score, state.children[4].score);
     // Get winning pool, shoot for diversity
     state.parent[0] = state.children[0];
     int found = 1;
@@ -138,7 +145,7 @@ struct State load(char * file) {
 
 struct State def_state() {
     return (struct State) {
-        .seed = 50,
+        .seed = time(NULL),
         .total_winners = NUM_WIN,
         .def_rand = DEFAULT_RANDOMNESS,
         .parent = malloc(sizeof(struct Program) * NUM_WIN),

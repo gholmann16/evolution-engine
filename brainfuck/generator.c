@@ -4,7 +4,7 @@
 #include <evolver.h>
 
 char rand_dna() {
-    char * chars = "+-<>[].0";
+    char * chars = "+-<>[].0,";
     return chars[rand() % strlen(chars)];
 }
 
@@ -12,7 +12,7 @@ struct Program evolve(struct Program prog, size_t randomness) {
     struct Program child;
     child.size = 0;
 
-    int max_additions = sizeof(child.code) - prog.size;
+    int max_additions = MAX_SIZE - prog.size;
     int added = 0;
 
     for (int gene = 0; gene < prog.size; gene++) {

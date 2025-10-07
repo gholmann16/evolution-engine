@@ -3,9 +3,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <evolver.h>
+#include "crcbf.h"
 
 struct Program ancestor_prog() {
-    char * code = ".[>.]";
+    char * code = crc_bf;
     struct Program def = {0};
     strcpy(def.code, code);
     def.size = strlen(code);
@@ -43,10 +44,9 @@ void run(struct Program * prog, char input[256], char output[256]) {
     }
 
     unsigned char memory[65536] = {0};
-    for (int i = 0; i < strlen(input); i++)
-        memory[i] = input[i];
 
-    unsigned char index = 0;
+    unsigned char out_dex = 0;
+    unsigned char in_dex = 0;
     unsigned short location = 0;
 
     for (int x = 0; x < prog->size; x++) {
@@ -91,7 +91,10 @@ void run(struct Program * prog, char input[256], char output[256]) {
                 }
                 break;
             case '.':
-                output[index++] = memory[location];
+                output[out_dex++] = memory[location];
+                break;
+            case ',':
+                memory[location] = input[in_dex++];
                 break;
             case '0':
                 memory[location] = 0;
@@ -105,5 +108,5 @@ void run(struct Program * prog, char input[256], char output[256]) {
         }
     }
 
-    output[index] = 0;
+    output[out_dex] = 0;
 }

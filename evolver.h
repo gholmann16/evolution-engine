@@ -1,10 +1,10 @@
 #include <stddef.h>
-#define WORST       5000000
-#define MAX_RUNTIME 500000
-#define MAX_SIZE    5000
+#define WORST       5000000000
+#define MAX_RUNTIME 50000000000
+#define MAX_SIZE    65533
 
 struct Program {
-    char code[1000]; // No 0 at the end, don't use strlen
+    char code[MAX_SIZE]; // No 0 at the end, don't use strlen
     size_t size;
     size_t runtime;
     size_t score;

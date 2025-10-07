@@ -12,7 +12,7 @@ short polynomials[8] = {
 };
 
 // DVB-S2
-char crc8(char * input) {
+char crc8(char input[256]) {
     size_t size = strlen(input);
     for (int byte = 0; byte < size; byte++) {
         // Obtain a short pointer for word work

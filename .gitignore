@@ -7,3 +7,4 @@ compiler
 fast
 gui
 *.bin
+crcbf.h
