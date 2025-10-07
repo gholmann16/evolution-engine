@@ -1,5 +1,5 @@
 #include <stddef.h>
-#define WORST       5000000000
+#define WORST       50000000000
 #define MAX_RUNTIME 50000000000
 #define MAX_SIZE    65533
 

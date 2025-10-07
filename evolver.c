@@ -7,8 +7,8 @@
 #include <evolver.h>
 #include <crc8.h>
 
-#define EXECUTIONS 10
-#define NUM_WIN 10
+#define EXECUTIONS 1
+#define NUM_WIN 3
 #define DEFAULT_RANDOMNESS 10050
 
 int compare_ratings(const void * first, const void * second) {
@@ -145,7 +145,7 @@ struct State load(char * file) {
 
 struct State def_state() {
     return (struct State) {
-        .seed = time(NULL),
+        .seed = 50,
         .total_winners = NUM_WIN,
         .def_rand = DEFAULT_RANDOMNESS,
         .parent = malloc(sizeof(struct Program) * NUM_WIN),

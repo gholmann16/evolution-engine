@@ -44,6 +44,8 @@ void run(struct Program * prog, char input[256], char output[256]) {
     }
 
     unsigned char memory[65536] = {0};
+    unsigned short jump_points[MAX_SIZE / 2]; // Even if odd, can't have odd brackets
+    unsigned short jump_pointer = 0;
 
     unsigned char out_dex = 0;
     unsigned char in_dex = 0;
@@ -77,18 +79,14 @@ void run(struct Program * prog, char input[256], char output[256]) {
                             brackets--;
                     }
                 }
+                else
+                    jump_points[jump_pointer++] = x;
                 break;
             case ']':
-                if (memory[location]) {
-                    int rev = 1;
-                    while(rev) {
-                        x--;
-                        if (prog->code[x] == ']')
-                            rev++;
-                        else if (prog->code[x] == '[')
-                            rev--;
-                    }
-                }
+                if (memory[location])
+                    x = jump_points[jump_pointer - 1];
+                else
+                    jump_pointer--;
                 break;
             case '.':
                 output[out_dex++] = memory[location];
