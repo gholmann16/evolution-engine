@@ -3,10 +3,9 @@
 #include <string.h>
 #include <time.h>
 #include <evolver.h>
-#include <crc8.h>
 
-#define NUM_WIN 3
-#define DEFAULT_RANDOMNESS 10050
+#define NUM_WIN 100
+#define DEFAULT_RANDOMNESS 1050
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -23,36 +22,40 @@ bool compare_code(struct Program first, struct Program second) {
     return false;
 }
 
-void fill_string(char input[256]) {
-    for (int i = 0; i < 255; i++) {
-        input[i] = rand() % 256;
-    }
-    input[255] = 0;
-}
-
-void score(struct Program * program, char inputs[3][256], char outputs[3]) {
-    int sc = 0;
-    program->runtime = 0;
+void score(struct Program * prog, char * inputs, char * expect) {
     char output[256];
-    static int runnum = -1;
-    runnum++;
 
-    for (int i = 0; i < 3; i++) {
-        run(program, inputs[i], output);
+    for (int test = 0; test < reps(); test++) {
+        run(prog, inputs + (test * 256), output);
+        if (prog->runtime == max_runtime())
+            break;
 
-        if (program->runtime == MAX_RUNTIME) {
-            program->score = WORST;
-            return;
+        if (read_all())
+            for (int ch = 0; ch < 256; ch++) {
+                prog->score += abs(output[ch] - expect[test * 256 + ch]);
+            }
+        else {
+            int diff = strlen(expect + (test * 256)) - strlen(output);
+            int max = (diff < 0) ? strlen(expect + (test * 256)) : strlen(output);
+            prog->score += 255 * abs(diff);
+            for (int ch = 0; ch < max; ch++) {
+                prog->score += abs(expect[test * 256 + ch] - output[ch]);
+            }
         }
-
-        sc += abs(outputs[i] - output[0]);
     }
-    if (sc)
-        program->score = WORST;
-        // program->score = sc * 50 + program->runtime;// + program->size * 2;
-    else
-        program->score = program->runtime + program->size; // If no difference it's golden
-    printf("Contestor %d has score of %ld\n", runnum, program->score);
+
+    if (exact()) {
+        if (prog->score || prog->runtime == max_runtime())
+            prog->score = max_runtime();
+        else
+            prog->score = prog->runtime + prog->size * 5;
+    }
+    else { // Non exact
+        if (prog->score || prog->runtime == max_runtime())
+            prog->score = prog->score * 50 + prog->runtime + prog->size * 5;
+        else
+            prog->score = 0;
+    }
 }
 
 // Returns true if repeat
@@ -62,30 +65,33 @@ bool generation(struct State state) {
 
     // Evolve from winning pool
     for (int winner = 0; winner < state.total_winners; winner++) {
-        // Keep the winner around so you never regress (agamogenesis)
+        // Keep the winner around so you never regress (agamogenesis) and reset
         state.children[winner * state.total_winners] = state.parent[winner];
+        state.children[winner * state.total_winners].score = 0;
+        state.children[winner * state.total_winners].runtime = 0;
+
+        // Other grandchildren slightly modified, reset by evolve()
         for (int grandchild = 1; grandchild < state.total_winners; grandchild++)
             state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions);
     }
 
-    char inputs[3][256];
-    char outputs[3];
-    char tmp[256];
-    for (int which = 0; which < 3; which++) {
-        fill_string(inputs[which]);
-        memcpy(tmp, inputs[which], 256);
-        outputs[which] = crc8(tmp);
+    char * inputs = malloc(reps() * 256);
+    char * expect = malloc(reps() * 256);
+    for (int test = 0; test < reps(); test++) {
+        answer(inputs + (test * 256), expect + (test * 256));
     }
-
-    for (int i = 0; i < state.total_winners * state.total_winners; i++)
-        score(&(state.children[i]), inputs, outputs);
+    for (int i = 0; i < state.total_winners * state.total_winners; i++) {
+        score(&(state.children[i]), inputs, expect);
+    }
+    free(inputs);
+    free(expect);
 
     qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
-    bool rep = (state.children[0].score == state.parent[0].score) ? true : false;
+    bool rep = !compare_code(state.children[0], state.parent[0]);
 
-    for (int i = 0; i < state.total_winners * state.total_winners; i++) {
-        printf("Winner %d score is %ld\n", i, state.children[i].score);
-    }
+    // for (int i = 0; i < state.total_winners * state.total_winners; i++) {
+    //     printf("Winner %d score is %ld\n", i, state.children[i].score);
+    // }
     // Get winning pool, shoot for diversity
     state.parent[0] = state.children[0];
     int found = 1;
@@ -108,7 +114,7 @@ bool generation(struct State state) {
 
 struct State def_state() {
     return (struct State) {
-        .seed = 50,
+        .seed = time(NULL),
         .total_winners = NUM_WIN,
         .def_rand = DEFAULT_RANDOMNESS,
         .parent = malloc(sizeof(struct Program) * NUM_WIN),

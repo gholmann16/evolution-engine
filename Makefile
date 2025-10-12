@@ -1,8 +1,11 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
 LDLIBS := -flto
 
-fast: cli.o evolver.o brainfuck.o generator.o runner.o crc8.o
-	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o crc8.o -o fast
+output.out: cli.o evolver.o brainfuck.o generator.o runner.o output.o
+	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o output.o -o output.out
+
+crc8.out: cli.o evolver.o brainfuck.o generator.o runner.o crc8.o
+	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o crc8.o -o crc8.out
 
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`
@@ -17,8 +20,11 @@ compiler: standalone.o compiler.o vector.o
 
 # Objects
 
-crc8.o: crc8.c
-	gcc $(CFLAGS) crc8.c
+output.o: tests/output.c
+	gcc $(CFLAGS) tests/output.c
+
+crc8.o: tests/crc8.c
+	gcc $(CFLAGS) tests/crc8.c
 
 runner.o: runner.c
 	gcc $(CFLAGS) runner.c

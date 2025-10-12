@@ -4,13 +4,15 @@
 #include <evolver.h>
 
 char rand_dna() {
-    char * chars = "+-<>[].0,";
+    char * chars = allowed_chars();
     return chars[rand() % strlen(chars)];
 }
 
 struct Program evolve(struct Program prog, size_t randomness) {
     struct Program child;
     child.size = 0;
+    child.runtime = 0;
+    child.score = 0;
 
     int max_additions = MAX_SIZE - prog.size;
     int added = 0;

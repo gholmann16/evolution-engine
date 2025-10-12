@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <evolver.h>
 
-#define EXECUTIONS 100
+#define EXECUTIONS 10000000
 
 // Returns false = end program
 bool cli_interpret(struct State state) {

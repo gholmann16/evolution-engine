@@ -1,6 +1,7 @@
-#include <stdio.h>
 #include <stddef.h>
 #include <string.h>
+#include "crcbf.h"
+#include "fill.h"
 
 // Needed for little endian
 #define SWAP(x) ((x>>8) & 0xff) | ((x & 0xff)<<8)
@@ -25,4 +26,36 @@ char crc8(char input[256]) {
     }
     // Should already be allocated as originally null byte
     return input[size];
+}
+
+void answer(char input[256], char expect[256]) {
+    fill_string(input);
+    char tmp[256];
+    memcpy(tmp, input, 256);
+    expect[0] = crc8(tmp);
+    expect[1] = 0;
+}
+
+bool read_all() {
+    return false;
+}
+
+bool exact() {
+    return true;
+}
+
+int reps() {
+    return 3;
+}
+
+char * def_code() {
+    return crc_bf;
+}
+
+unsigned long long max_runtime() {
+    return 50000000000;
+}
+
+char * allowed_chars() {
+    return "+-<>[].";
 }

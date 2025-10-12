@@ -3,10 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <evolver.h>
-#include "crcbf.h"
 
 struct Program ancestor_prog() {
-    char * code = crc_bf;
+    char * code = def_code();
     struct Program def = {0};
     strcpy(def.code, code);
     def.size = strlen(code);
@@ -39,7 +38,7 @@ bool validate(struct Program prog) {
 
 void run(struct Program * prog, char input[256], char output[256]) {
     if(validate(*prog) == true) {
-        prog->runtime = MAX_RUNTIME;
+        prog->runtime = max_runtime();
         return; // Punishment for failing
     }
 
@@ -52,7 +51,7 @@ void run(struct Program * prog, char input[256], char output[256]) {
     unsigned short location = 0;
 
     for (int x = 0; x < prog->size; x++) {
-        if (++prog->runtime == MAX_RUNTIME)
+        if (++prog->runtime == max_runtime())
             return;
 
         switch(prog->code[x]) {
@@ -106,5 +105,6 @@ void run(struct Program * prog, char input[256], char output[256]) {
         }
     }
 
-    output[out_dex] = 0;
+    if (!exact())
+        output[out_dex] = 0;
 }

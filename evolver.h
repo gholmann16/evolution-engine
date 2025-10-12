@@ -1,7 +1,5 @@
 #include <stddef.h>
-#define WORST       50000000000
-#define MAX_RUNTIME 50000000000
-#define MAX_SIZE    65533
+#define MAX_SIZE 65533
 
 struct Program {
     char code[MAX_SIZE]; // No 0 at the end, don't use strlen
@@ -34,3 +32,12 @@ struct Program evolve(struct Program parent, size_t randomness);
 // Utility
 char * debug(struct Program prog); // Should be an allocated string
 char * compile(struct Program program); // Allocated string ready to be passed to assembler
+
+// Testing
+bool answer(char input[256], char expect[256]); // Convert a random input string to an expected output ret is whether to read all or not
+bool read_all();
+bool exact(); // Needs to be exact or not
+int reps(); // How much times to repeat the test
+char * def_code();
+unsigned long long max_runtime();
+char * allowed_chars();
