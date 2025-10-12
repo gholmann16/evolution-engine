@@ -2,18 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <signal.h>
 #include <evolver.h>
 #include <crc8.h>
 
-#define EXECUTIONS 1
 #define NUM_WIN 3
 #define DEFAULT_RANDOMNESS 10050
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
-    return ((struct Program *) first)->score - ((struct Program *) second)->score; 
+    long long diff = ((struct Program *) first)->score - ((struct Program *) second)->score;
+    return (int)((diff > 0) - (diff < 0)); // avoid overflow
 }
 
 bool compare_code(struct Program first, struct Program second) {
@@ -85,7 +83,9 @@ bool generation(struct State state) {
     qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
     bool rep = (state.children[0].score == state.parent[0].score) ? true : false;
 
-    printf("state of generation:\n1: %ld\n2: %ld\n3: %ld\n4: %ld\n5: %ld\n", state.children[0].score, state.children[1].score, state.children[2].score, state.children[3].score, state.children[4].score);
+    for (int i = 0; i < state.total_winners * state.total_winners; i++) {
+        printf("Winner %d score is %ld\n", i, state.children[i].score);
+    }
     // Get winning pool, shoot for diversity
     state.parent[0] = state.children[0];
     int found = 1;
@@ -106,43 +106,6 @@ bool generation(struct State state) {
     return rep;
 }
 
-// Returns false = end program
-bool cli_interpret(struct State state) {
-    printf("Winner of generation %d won with a score of %ld, size %ld, runtime %ld! (%d previously wins) (seed is %d):\n", 
-        state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed);
-    write(1, state.children[0].code, state.children[0].size);
-    puts("");
-
-    if (state.children[0].score == 0) {
-        puts("Solved");
-        return false;
-    }
-    else if (state.def_rand - state.repetitions == 50) {
-        puts("I give up");
-        return false;
-    }
-
-    return true;
-}
-
-void save(struct State state) {
-    FILE * out = fopen("save.bin", "wb");
-    fwrite(&state, sizeof(struct State), 1, out);
-    fwrite(state.parent, sizeof(struct Program), state.total_winners, out);
-    fclose(out);
-}
-
-struct State load(char * file) {
-    FILE * in = fopen(file, "rb");
-    struct State revived;
-    fread(&revived, sizeof(struct State), 1, in);
-    revived.parent = malloc(sizeof(struct Program) * revived.total_winners);
-    revived.children = malloc(sizeof(struct Program) * revived.total_winners * revived.total_winners);
-    fread(revived.parent, sizeof(struct Program), revived.total_winners, in);
-    fclose(in);
-    return revived;
-}
-
 struct State def_state() {
     return (struct State) {
         .seed = 50,
@@ -151,31 +114,4 @@ struct State def_state() {
         .parent = malloc(sizeof(struct Program) * NUM_WIN),
         .children = malloc(sizeof(struct Program) * NUM_WIN * NUM_WIN),
     };
-}
-
-static volatile bool running = true;
-
-void quit(int sig) {
-    running = false;
-}
-
-int evolver(struct State state) {
-    signal(SIGINT, quit);
-    // Set the default
-    for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
-        state.parent[ancestor] = ancestor_prog();
-
-    while (running && state.runs < EXECUTIONS) {
-        bool repeat = generation(state);
-        state.runs += EXECUTIONS * !cli_interpret(state);
-        state.repetitions = repeat*state.repetitions + repeat; // Add 1 if it repeated
-        state.runs++;
-    }
-
-    if (running == false)
-        save(state);
-
-    free(state.parent);
-    free(state.children);
-    return 0;
 }

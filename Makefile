@@ -1,8 +1,8 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
 LDLIBS := -flto
 
-fast: cli.o evolver.o brainfuck.o generator.o crc8.o
-	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o crc8.o -o fast
+fast: cli.o evolver.o brainfuck.o generator.o runner.o crc8.o
+	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o crc8.o -o fast
 
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`
@@ -19,6 +19,9 @@ compiler: standalone.o compiler.o vector.o
 
 crc8.o: crc8.c
 	gcc $(CFLAGS) crc8.c
+
+runner.o: runner.c
+	gcc $(CFLAGS) runner.c
 
 main.o: main.c
 	gcc $(CFLAGS) main.c 

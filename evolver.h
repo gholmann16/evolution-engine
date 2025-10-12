@@ -20,12 +20,11 @@ struct State {
     struct Program * children; // struct Program * total_winners^2
 };
 
-// Running
-struct State load(char * file);
+// Init
 struct State def_state();
-int evolver(struct State);
 
 // Executing
+bool generation(struct State state);
 void run(struct Program * prog, char input[256], char output[256]); // input read only, output should be non freeable memory, too many allocs otherwise
 
 // Evolving

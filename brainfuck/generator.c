@@ -17,7 +17,7 @@ struct Program evolve(struct Program prog, size_t randomness) {
 
     for (int gene = 0; gene < prog.size; gene++) {
         int decision = rand() % randomness;
-        switch (5) {
+        switch (decision) {
             case 0: // 1 % chance you remove code
                 added--;
                 break;
