@@ -1,15 +1,51 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <time.h>
 
-void append(char str[1000000], int * str_size, char * app, int app_size) {
+void append(char * str, int * str_size, char * app, int app_size) {
     for(int i = 0; i < app_size; i++)
         str[(*str_size)++] = app[i];
 }
 
-char * jit(char * code, char input[256], char output[256]) {
-    unsigned char str[1000000];
+// Takes three pointers and returns 1 byte (al)
+typedef size_t (*fn)(char * memory, char * input, char * output);
+
+char * program;
+// Boilerplate code
+char boilerplate [] = {
+    0x48, 0x31, 0xC9, // xor rcx, rcx
+    0x4D, 0x31, 0xC0, // xor r8, r8
+    0x4D, 0x31, 0xC9, // xor r9, r9
+    0x48, 0x31, 0xC0, // xor rax, rax (clean it for exit, rax should tell us last io)
+};
+
+void init_jit() {
+    program = mmap(NULL, // address
+        4096 * 256, // page sizes are 4096, alloacte 256 so we always have space (max instruction 10 * 65536 / 4096 = 160)
+        PROT_READ | PROT_WRITE | PROT_EXEC,
+        MAP_PRIVATE | MAP_ANONYMOUS,
+        -1, // fd (not used here)
+        0 // offset (not used here)
+    );
+    if (program == MAP_FAILED) {
+        perror("failed to allocate memory");
+        exit(1);
+    }
+
     int index = 0;
+    append(program, &index, boilerplate, sizeof(boilerplate));
+}
+
+void free_jit() {
+    munmap(program, 4096 * 256);
+}
+
+char * jit(char * code, char input[256], char output[256]) {
+    clock_t begin = clock();
+    int index = sizeof(boilerplate); // always at the beginning never touched
 
     // 1. rdi = pointer to memory space
     // 2. rsi = pointer to input
@@ -22,16 +58,6 @@ char * jit(char * code, char input[256], char output[256]) {
     // 0. al used as temporary storage of io
     // 7. r10 free for future use
     // 8. r11 free for future use
-
-    // Boilerplate code
-    char boilerplate [] = {
-        0x48, 0x31, 0xC9, // xor rcx, rcx
-        0x4D, 0x31, 0xC0, // xor r8, r8
-        0x4D, 0x31, 0xC9, // xor r9, r9
-        0x48, 0x31, 0xC0, // xor rax, rax (clean it for exit, rax should tell us last io)
-    };
-
-    append(str, &index, boilerplate, sizeof(boilerplate));
 
     // RDI is the memory pointer
     char rig[] = {0x66, 0xFF, 0xC1}; // inc cx
@@ -68,25 +94,25 @@ char * jit(char * code, char input[256], char output[256]) {
     for (unsigned short x = 0; x < strlen(code); x++) {
         switch(code[x]) {
             case '>':
-                append(str, &index, rig, sizeof(rig));
+                append(program, &index, rig, sizeof(rig));
                 break;
             case '<':
-                append(str, &index, lef, sizeof(lef));
+                append(program, &index, lef, sizeof(lef));
                 break;
             case '+':
-                append(str, &index, inc, sizeof(inc));
+                append(program, &index, inc, sizeof(inc));
                 break;
             case '-':
-                append(str, &index, dec, sizeof(dec));
+                append(program, &index, dec, sizeof(dec));
                 break;
             case ',':
-                append(str, &index, com, sizeof(com));
+                append(program, &index, com, sizeof(com));
                 break;
             case '.':
-                append(str, &index, per, sizeof(per));
+                append(program, &index, per, sizeof(per));
                 break;
             case '[':
-                append(str, &index, open, sizeof(open));
+                append(program, &index, open, sizeof(open));
                 brackets++;
                 break;
             case ']':
@@ -121,26 +147,37 @@ char * jit(char * code, char input[256], char output[256]) {
                 } while (search);
 
                 // Can safely assume we found it and temp is the number
-                append(str, &index, close, sizeof(close));
-                *(int *)(str + index - 4) = offset; // 4 less than the index after adding close
+                append(program, &index, close, sizeof(close));
+                *(int *)(program + index - 4) = offset; // 4 less than the index after adding close
 
                 int skip = offset + sizeof(close); // for the forward jump, don't skip this part
                 skip *= -1; // forwards now;
-                *(int *)(str + index + offset - 4) = skip;
+                *(int *)(program + index + offset - 4) = skip;
                 break;
         }
     }
 
+    program[index++] = 0xC3; // this is ret
+
     if (brackets != 0)
         return NULL;
-    // puts("Here");
-
+    
     // for (int i = 0; i < index; i++) {
     //     if (i % 30 == 0)
     //         puts("");
-    //     printf("0x%x ", str[i]);
-
+    //     printf("0x%02x ", program[i]);
     // }
 
-    unsigned char memory [65536];
+    unsigned char memory[65536] = {0};
+    clock_t end = clock();
+    printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
+    begin = clock();
+
+    fn jit_function = (fn)program;
+    size_t rax = jit_function(memory, input, output);
+    char al = (char)rax;
+    end = clock();
+    printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
+    printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
+
 }

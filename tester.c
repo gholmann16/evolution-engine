@@ -4,6 +4,8 @@
 #include "evolver.h"
 
 char * jit(char * code, char input[256], char output[256]);
+void init_jit();
+void free_jit();
 
 int main() {
     char * code = def_code();
@@ -19,12 +21,13 @@ int main() {
     puts(output);
     printf("score time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
 
+    init_jit();
     printf("versus\n");
-    begin - clock();
+    begin = clock();
     char * out = jit(code, input, output);
     end = clock();
     if(out)
         puts("success");
     printf("score time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
-
+    free_jit();
 }
