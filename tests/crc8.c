@@ -57,5 +57,5 @@ unsigned long long max_runtime() {
 }
 
 char * allowed_chars() {
-    return "+-<>[].";
+    return "+-<>[].,";
 }
