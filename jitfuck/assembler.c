@@ -4,8 +4,9 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <evolver.h>
 
-void append(char * str, int * str_size, char * app, int app_size) {
+void append(char * str, int * str_size, const char * app, int app_size) {
     for(int i = 0; i < app_size; i++)
         str[(*str_size)++] = app[i];
 }
@@ -43,7 +44,7 @@ void free_jit() {
     munmap(program, 4096 * 256);
 }
 
-char * jit(char * code, char input[256], char output[256]) {
+void jit(struct Program * prog, char input[256], char output[256]) {
     clock_t begin = clock();
     int index = sizeof(boilerplate); // always at the beginning never touched
 
@@ -82,17 +83,18 @@ char * jit(char * code, char input[256], char output[256]) {
         0x0F, 0x85, 0x00, 0x00, 0x00, 0x00, // jnz + offset, have to fill the offset
     };
 
-    int brackets = 0;
-
     /*
     !!
     Way to make it faster: use char width enum type and then index array instead of switch case excep for ], maybe that's worth 0
     https://stackoverflow.com/questions/4879286/specifying-size-of-enum-type-in-c
+    tried doing a 256 long array and directly accessing it and it wasn't any faster
 
     !! Use flat rdi, instead of offset, by using double memory then setting the low byte / word 0
-    */ 
-    for (unsigned short x = 0; x < strlen(code); x++) {
-        switch(code[x]) {
+    */
+    int vec[65536];
+    int brackets = 0;
+    for (unsigned short x = 0; x < prog->size; x++) {
+        switch(prog->code[x]) {
             case '>':
                 append(program, &index, rig, sizeof(rig));
                 break;
@@ -113,45 +115,16 @@ char * jit(char * code, char input[256], char output[256]) {
                 break;
             case '[':
                 append(program, &index, open, sizeof(open));
-                brackets++;
+                vec[brackets++] = index;
                 break;
             case ']':
-                brackets--;
+                if (brackets == 0)
+                    return;
 
-                unsigned short temp = x;
-                int offset = sizeof(open); // Once you get back to the original opening, it has to be after that
-                int search = 0;
-                do {
-                    switch (code[temp--]) {
-                        case 0: // will wrap around to get 0
-                            return NULL; // close than open
-                        case '[':
-                            search++;
-                            offset -= sizeof(open);
-                            break;
-                        case ']':
-                            search--;
-                            offset -= sizeof(close);
-                            break;
-                        case ',':
-                        case '.':
-                            offset -= sizeof(com);
-                            break;
-                        case '>':
-                        case '<':
-                        case '+':
-                        case '-':
-                            offset -= sizeof(rig);
-                            break;
-                    }
-                } while (search);
-
-                // Can safely assume we found it and temp is the number
                 append(program, &index, close, sizeof(close));
+                int offset = vec[--brackets] - index;
                 *(int *)(program + index - 4) = offset; // 4 less than the index after adding close
-
-                int skip = offset + sizeof(close); // for the forward jump, don't skip this part
-                skip *= -1; // forwards now;
+                int skip = -offset - sizeof(close); // for the forward jump, don't skip this part
                 *(int *)(program + index + offset - 4) = skip;
                 break;
         }
@@ -160,12 +133,12 @@ char * jit(char * code, char input[256], char output[256]) {
     program[index++] = 0xC3; // this is ret
 
     if (brackets != 0)
-        return NULL;
+        return;
     
     // for (int i = 0; i < index; i++) {
     //     if (i % 30 == 0)
     //         puts("");
-    //     printf("0x%02x ", program[i]);
+    //     printf("0x%02x ", program[i] & 0xff);
     // }
 
     unsigned char memory[65536] = {0};
@@ -175,9 +148,9 @@ char * jit(char * code, char input[256], char output[256]) {
 
     fn jit_function = (fn)program;
     size_t rax = jit_function(memory, input, output);
-    char al = (char)rax;
+    // char al = (char)rax;
     end = clock();
-    printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
+    // printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
     printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
 
 }
