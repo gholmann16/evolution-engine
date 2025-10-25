@@ -15,7 +15,7 @@ int main() {
         .score = 0,
     };
     strcpy(prog.code, code);
-    char input[256] = "Hello wor\n";
+    alignas(256) char input[256] = "Hello wor\n";
     char output[256] = {0};
     clock_t begin = clock();
     run(&prog, input, output);
@@ -24,13 +24,13 @@ int main() {
     printf("score time = %lf with %ld instructions\n", (double)(end - begin) / CLOCKS_PER_SEC, prog.runtime);
 
     prog.runtime = 0;
-    char output2[256] = {0};
+    alignas(256) char output2[256] = {0};
     init_jit();
     printf("versus\n");
     begin = clock();
-    char * out = jit(&prog, input, output2);
+    jit(&prog, input, output2);
     end = clock();
-    puts(output);
+    puts(output2);
     printf("score time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
     free_jit();
 }
