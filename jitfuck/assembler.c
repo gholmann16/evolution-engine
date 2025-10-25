@@ -46,7 +46,7 @@ void free_env() {
 void run(struct Program * prog, char input[256], char output[256]) {
     // clock_t begin = clock();
     int index = 0;
-
+    prog->runtime = max_runtime();
     // 1. rdi = pointer to memory space (aligned so as di will overflow back to the start
     // 2. rsi = initial counter, should be 0 unless you want to start with some already
     // 2. rdx = pointer to input (aligned so sil will overflow back to start)
@@ -145,10 +145,11 @@ void run(struct Program * prog, char input[256], char output[256]) {
 
     fn jit_function = (fn)program;
     jit_function(memory, max_runtime(), input, output);
-    asm("\t mov %%rsi,%0" : "=r"(prog->runtime)); // fetch rsi
+    size_t difference;
+    asm("\t mov %%rsi,%0" : "=r"(difference)); // fetch rsi
     // char al = (char)rax;
     // end = clock();
-    prog->runtime = max_runtime() - prog->runtime;
+    prog->runtime -= difference;
     // printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
     // printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
 

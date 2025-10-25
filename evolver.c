@@ -23,9 +23,10 @@ bool compare_code(struct Program first, struct Program second) {
 }
 
 void score(struct Program * prog, char * inputs, char * expect) {
-    alignas(256) char output[256] = {0};
+    prog->score = 0;
 
     for (int test = 0; test < reps(); test++) {
+        alignas(256) char output[256] = {0};
         run(prog, inputs + (test * 256), output);
         if (prog->runtime == max_runtime())
             break;
@@ -44,15 +45,17 @@ void score(struct Program * prog, char * inputs, char * expect) {
         }
     }
 
-    if (exact()) {
-        if (prog->score || prog->runtime == max_runtime())
+    if (prog->runtime == max_runtime())
+        prog->score = max_runtime();
+    else if (exact()) {
+        if (prog->score)
             prog->score = max_runtime();
         else
             prog->score = prog->runtime + prog->size * 5;
     }
-    else { // Non exact
-        if (prog->score || prog->runtime == max_runtime())
-            prog->score = prog->score * 50 + prog->runtime + prog->size * 5;
+    else { // fuzzy
+        if (prog->score)
+            prog->score = prog->score * 50 + prog->size;
         else
             prog->score = 0;
     }

@@ -1,36 +1,50 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 #include "evolver.h"
 
-char * jit(struct Program * code, char input[256], char output[256]);
-void init_jit();
-void free_jit();
-
 int main() {
-    char * code = def_code();
+    char * code = "<++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++------------.>++++++++[<+++++++++++>-]<-.-<.+++.------.--------.>>>++++[<++++++++>-]<+.";
     struct Program prog = {
         .size = strlen(code),
         .runtime = 0,
         .score = 0,
     };
     strcpy(prog.code, code);
-    alignas(256) char input[256] = "Hello wor\n";
-    char output[256] = {0};
-    clock_t begin = clock();
+    alignas(256) char input[256] = {0};
+    char expect[256];
+    answer(input, expect);
+    alignas(256) char output[256] = {0};
     run(&prog, input, output);
-    clock_t end = clock();
-    puts(output);
-    printf("score time = %lf with %ld instructions\n", (double)(end - begin) / CLOCKS_PER_SEC, prog.runtime);
+    if (prog.runtime == max_runtime())
+        puts("exit");
 
-    prog.runtime = 0;
-    alignas(256) char output2[256] = {0};
-    init_jit();
-    printf("versus\n");
-    begin = clock();
-    jit(&prog, input, output2);
-    end = clock();
-    puts(output2);
-    printf("score time = %lf with %ld instructions\n", (double)(end - begin) / CLOCKS_PER_SEC, prog.runtime);
-    free_jit();
+    int diff = strlen(expect) - strlen(output);
+    int max = (diff < 0) ? strlen(expect) : strlen(output);
+    prog.score += 255 * abs(diff);
+    for (int ch = 0; ch < max; ch++) {
+        prog.score += abs(expect[ch] - output[ch]);
+        printf("at %d %02x and %02x are different\n", ch, expect[ch], output[ch]);
+    }
+    printf("initial score of %ld, %ld, %ld, output %s vs %s\n", prog.score, prog.size, prog.runtime, output, expect);
+
+
+    // char output[256] = {0};
+    // clock_t begin = clock();
+    // run(&prog, input, output);
+    // clock_t end = clock();
+    // puts(output);
+    // printf("score time = %lf with %ld instructions\n", (double)(end - begin) / CLOCKS_PER_SEC, prog.runtime);
+
+    // prog.runtime = 0;
+    // alignas(256) char output2[256] = {0};
+    // init_env();
+    // printf("versus\n");
+    // begin = clock();
+    // run(&prog, input, output2);
+    // end = clock();
+    // puts(output2);
+    // printf("score time = %lf with %ld instructions\n", (double)(end - begin) / CLOCKS_PER_SEC, prog.runtime);
+    // free_env();
 }

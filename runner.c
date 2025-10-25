@@ -9,9 +9,14 @@
 // Returns false = end program
 bool cli_interpret(struct State state) {
     static double last = 0;
-    printf("Winner of generation %d won with a score of %ld, size %ld, runtime %ld (%d previously wins) (seed is %d). Time used: %lf:\n", 
-        state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed, (clock() - last) / CLOCKS_PER_SEC);
+    static double average = 0;
+    double time_taken = (clock() - last) / CLOCKS_PER_SEC;
     last = clock();
+    average = (average * (state.runs - 1) + time_taken) / state.runs;
+    printf("Winner of generation %d won with a score of %ld, size %ld, looptime %ld (%d previously wins) (seed is %d). Time used %lf (average is %lf).\n", 
+        state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed,
+        time_taken, average
+    );
     write(1, state.children[0].code, state.children[0].size);
     puts("");
 
@@ -60,9 +65,10 @@ int runner(struct State state) {
 
     while (running && state.runs < EXECUTIONS) {
         bool repeat = generation(state);
-        state.runs += EXECUTIONS * !cli_interpret(state);
-        state.repetitions = repeat*state.repetitions + repeat; // Add 1 if it repeated
         state.runs++;
+        if (cli_interpret(state) == false)
+            break;
+        state.repetitions = repeat*state.repetitions + repeat; // Add 1 if it repeated
     }
 
     if (running == false)
