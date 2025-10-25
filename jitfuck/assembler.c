@@ -5,6 +5,15 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <evolver.h>
+#include "crcbf.h"
+
+struct Program ancestor_prog() {
+    char * code = "+";
+    struct Program def = {0};
+    strcpy(def.code, code);
+    def.size = strlen(code);
+    return def;
+}
 
 void append(char * str, int * str_size, const char * app, int app_size) {
     for(int i = 0; i < app_size; i++)
@@ -12,13 +21,13 @@ void append(char * str, int * str_size, const char * app, int app_size) {
 }
 
 // Takes three pointers and returns rax
-typedef size_t (*fn)(char * memory, size_t runs, char * input, char * output);
+typedef size_t (*fn)(unsigned char * memory, size_t runs, char * input, char * output);
 
 char * program;
 
-void init_jit() {
+void init_env() {
     program = mmap(NULL, // address
-        4096 * 128, // page sizes are 4096, alloacte 256 so we always have space (max instruction (9 + 5)/2 = 7 * 65536 / 4096 = 112)
+        4096 * 256, // page sizes are 4096, alloacte 256 so we always have space
         PROT_READ | PROT_WRITE | PROT_EXEC,
         MAP_PRIVATE | MAP_ANONYMOUS,
         -1, // fd (not used here)
@@ -30,12 +39,12 @@ void init_jit() {
     }
 }
 
-void free_jit() {
-    munmap(program, 4096 * 128);
+void free_env() {
+    munmap(program, 4096 * 256);
 }
 
-void jit(struct Program * prog, char input[256], char output[256]) {
-    clock_t begin = clock();
+void run(struct Program * prog, char input[256], char output[256]) {
+    // clock_t begin = clock();
     int index = 0;
 
     // 1. rdi = pointer to memory space (aligned so as di will overflow back to the start
@@ -65,6 +74,10 @@ void jit(struct Program * prog, char input[256], char output[256]) {
         0xE9, 0x00, 0x00, 0x00, 0x00, // jmp + offset, have to go fill the offset.
     };
     char close[] = {
+        0x48, 0xff, 0xce, // dec rsi
+        0x48, 0x85, 0xF6, // test rsi, rsi
+        0x75, 0x01, // jnz SHORT 1
+        0xC3, // ret
         0xF6, 0x07, 0xFF, // test byte ptr [rdi], 0xFF
         0x0F, 0x85, 0x00, 0x00, 0x00, 0x00, // jnz + offset, have to fill the offset
     };
@@ -126,15 +139,17 @@ void jit(struct Program * prog, char input[256], char output[256]) {
     // }
 
     alignas(65536) unsigned char memory[65536] = {0};
-    clock_t end = clock();
-    printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
-    begin = clock();
+    // clock_t end = clock();
+    // printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
+    // begin = clock();
 
     fn jit_function = (fn)program;
-    size_t rax = jit_function(memory, 0, input, output);
+    jit_function(memory, max_runtime(), input, output);
+    asm("\t mov %%rsi,%0" : "=r"(prog->runtime)); // fetch rsi
     // char al = (char)rax;
-    end = clock();
+    // end = clock();
+    prog->runtime = max_runtime() - prog->runtime;
     // printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
-    printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
+    // printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
 
 }

@@ -23,7 +23,7 @@ bool compare_code(struct Program first, struct Program second) {
 }
 
 void score(struct Program * prog, char * inputs, char * expect) {
-    char output[256];
+    alignas(256) char output[256] = {0};
 
     for (int test = 0; test < reps(); test++) {
         run(prog, inputs + (test * 256), output);
@@ -75,7 +75,7 @@ bool generation(struct State state) {
             state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions);
     }
 
-    char * inputs = malloc(reps() * 256);
+    alignas(256) char * inputs = malloc(reps() * 256);
     char * expect = malloc(reps() * 256);
     for (int test = 0; test < reps(); test++) {
         answer(inputs + (test * 256), expect + (test * 256));

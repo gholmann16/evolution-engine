@@ -31,6 +31,6 @@ int main() {
     jit(&prog, input, output2);
     end = clock();
     puts(output2);
-    printf("score time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
+    printf("score time = %lf with %ld instructions\n", (double)(end - begin) / CLOCKS_PER_SEC, prog.runtime);
     free_jit();
 }

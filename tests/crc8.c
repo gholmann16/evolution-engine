@@ -1,6 +1,5 @@
 #include <stddef.h>
 #include <string.h>
-#include "crcbf.h"
 #include "fill.h"
 
 // Needed for little endian
@@ -48,12 +47,8 @@ int reps() {
     return 3;
 }
 
-char * def_code() {
-    return crc_bf;
-}
-
 unsigned long long max_runtime() {
-    return 50000000000;
+    return 2000000;
 }
 
 char * allowed_chars() {

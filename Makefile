@@ -7,6 +7,12 @@ output.out: cli.o evolver.o brainfuck.o generator.o runner.o output.o
 crc8.out: cli.o evolver.o brainfuck.o generator.o runner.o crc8.o
 	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o crc8.o -o crc8.out
 
+jit_output.out: cli.o evolver.o assembler.o generator.o runner.o output.o
+	gcc $(LDLIBS) cli.o evolver.o assembler.o generator.o runner.o output.o -o jit_output.out
+
+jit_crc8.out: cli.o evolver.o assembler.o generator.o runner.o crc8.o
+	gcc $(LDLIBS) cli.o evolver.o assembler.o generator.o runner.o crc8.o -o jit_crc8.out
+
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`
 gui: main.o evolver.o brainfuck.o generator.o
@@ -19,6 +25,9 @@ compiler: standalone.o compiler.o vector.o
 	gcc $(LDLIBS) standalone.o compiler.o vector.o -o compiler
 
 # Objects
+
+assembler.o: jitfuck/assembler.c
+	gcc $(CFLAGS) jitfuck/assembler.c
 
 output.o: tests/output.c
 	gcc $(CFLAGS) tests/output.c

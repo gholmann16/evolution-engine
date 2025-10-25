@@ -3,13 +3,15 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <evolver.h>
-
+#include <time.h>
 #define EXECUTIONS 10000000
 
 // Returns false = end program
 bool cli_interpret(struct State state) {
-    printf("Winner of generation %d won with a score of %ld, size %ld, runtime %ld! (%d previously wins) (seed is %d):\n", 
-        state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed);
+    static double last = 0;
+    printf("Winner of generation %d won with a score of %ld, size %ld, runtime %ld (%d previously wins) (seed is %d). Time used: %lf:\n", 
+        state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed, (clock() - last) / CLOCKS_PER_SEC);
+    last = clock();
     write(1, state.children[0].code, state.children[0].size);
     puts("");
 
@@ -50,6 +52,7 @@ void quit(int sig) {
 }
 
 int runner(struct State state) {
+    init_env();
     signal(SIGINT, quit);
     // Set the default
     for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
@@ -67,5 +70,6 @@ int runner(struct State state) {
 
     free(state.parent);
     free(state.children);
+    free_env();
     return 0;
 }

@@ -22,8 +22,10 @@ struct State {
 struct State def_state();
 
 // Executing
+void init_env();
 bool generation(struct State state);
 void run(struct Program * prog, char input[256], char output[256]); // input read only, output should be non freeable memory, too many allocs otherwise
+void free_env();
 
 // Evolving
 struct Program ancestor_prog();
@@ -38,6 +40,5 @@ bool answer(char input[256], char expect[256]); // Convert a random input string
 bool read_all();
 bool exact(); // Needs to be exact or not
 int reps(); // How much times to repeat the test
-char * def_code();
 unsigned long long max_runtime();
 char * allowed_chars();

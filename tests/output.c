@@ -18,10 +18,6 @@ int reps() {
     return 1;
 }
 
-char * def_code() {
-    return ".";
-}
-
 unsigned long long max_runtime() {
     return 500000;
 }

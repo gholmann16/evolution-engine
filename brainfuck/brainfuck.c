@@ -4,8 +4,15 @@
 #include <stdio.h>
 #include <evolver.h>
 
+void init_env() {
+    ;
+}
+void free_env() {
+    ;
+}
+
 struct Program ancestor_prog() {
-    char * code = def_code();
+    char * code = "+";
     struct Program def = {0};
     strcpy(def.code, code);
     def.size = strlen(code);
@@ -51,9 +58,6 @@ void run(struct Program * prog, char input[256], char output[256]) {
     unsigned short location = 0;
 
     for (int x = 0; x < prog->size; x++) {
-        if (++prog->runtime == max_runtime())
-            return;
-
         switch(prog->code[x]) {
             case '+': 
                 memory[location]++;
@@ -68,20 +72,19 @@ void run(struct Program * prog, char input[256], char output[256]) {
                 location--;
                 break;
             case '[':
-                if (memory[location] == 0) {
-                    int brackets = 1;
-                    while (brackets) {
-                        x++;
-                        if (prog->code[x] == '[')
-                            brackets++;
-                        else if (prog->code[x] == ']')
-                            brackets--;
-                    }
+                jump_points[jump_pointer++] = x;
+                int brackets = 1;
+                while (brackets) {
+                    x++;
+                    if (prog->code[x] == '[')
+                        brackets++;
+                    else if (prog->code[x] == ']')
+                        brackets--;
                 }
-                else
-                    jump_points[jump_pointer++] = x;
-                break;
+                // Could do x-- and break, or just continue
             case ']':
+                if (++prog->runtime == max_runtime())
+                    return;
                 if (memory[location])
                     x = jump_points[jump_pointer - 1];
                 else
