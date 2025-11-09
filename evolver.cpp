@@ -3,9 +3,12 @@
 #include <string.h>
 #include <time.h>
 #include <evolver.h>
+#include "tests/test.hpp"
 
 #define NUM_WIN 100
 #define DEFAULT_RANDOMNESS 1050
+
+static Test * tester = create_output();
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -16,7 +19,7 @@ int compare_ratings(const void * first, const void * second) {
 bool compare_code(struct Program first, struct Program second) {
     if (first.size != second.size)
         return true;
-    for (int i = 0; i < first.size; i++)
+    for (size_t i = 0; i < first.size; i++)
         if (first.code[i] != second.code[i]) // Compare as strings rather than voids
             return true;
     return false;
@@ -25,13 +28,13 @@ bool compare_code(struct Program first, struct Program second) {
 void score(struct Program * prog, char * inputs, char * expect) {
     prog->score = 0;
 
-    for (int test = 0; test < reps(); test++) {
+    for (int test = 0; test < tester->reps(); test++) {
         alignas(256) char output[256] = {0};
-        run(prog, inputs + (test * 256), output);
-        if (prog->runtime == max_runtime())
+        run(prog, inputs + (test * 256), output, tester->max_runtime());
+        if (prog->runtime == tester->max_runtime())
             break;
 
-        if (read_all())
+        if (tester->read_all())
             for (int ch = 0; ch < 256; ch++) {
                 prog->score += abs(output[ch] - expect[test * 256 + ch]);
             }
@@ -45,11 +48,11 @@ void score(struct Program * prog, char * inputs, char * expect) {
         }
     }
 
-    if (prog->runtime == max_runtime())
-        prog->score = max_runtime();
-    else if (exact()) {
+    if (prog->runtime == tester->max_runtime())
+        prog->score = tester->max_runtime() * 50;
+    else if (tester->exact()) {
         if (prog->score)
-            prog->score = max_runtime();
+            prog->score = tester->max_runtime();
         else
             prog->score = prog->runtime + prog->size * 5;
     }
@@ -62,7 +65,7 @@ void score(struct Program * prog, char * inputs, char * expect) {
 }
 
 // Returns true if repeat
-bool generation(struct State state) {
+extern "C" bool generation(struct State state) {
     // Determinism
     srand(state.seed + state.runs);
 
@@ -75,13 +78,13 @@ bool generation(struct State state) {
 
         // Other grandchildren slightly modified, reset by evolve()
         for (int grandchild = 1; grandchild < state.total_winners; grandchild++)
-            state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions);
+            state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions, tester->allowed_chars());
     }
 
-    alignas(256) char * inputs = malloc(reps() * 256);
-    char * expect = malloc(reps() * 256);
-    for (int test = 0; test < reps(); test++) {
-        answer(inputs + (test * 256), expect + (test * 256));
+    alignas(256) char * inputs = (char *)malloc(tester->reps() * 256);
+    char * expect = (char *)malloc(tester->reps() * 256);
+    for (int test = 0; test < tester->reps(); test++) {
+        tester->answer(inputs + (test * 256), expect + (test * 256));
     }
     for (int i = 0; i < state.total_winners * state.total_winners; i++) {
         score(&(state.children[i]), inputs, expect);
@@ -115,12 +118,12 @@ bool generation(struct State state) {
     return rep;
 }
 
-struct State def_state() {
+extern "C" struct State def_state() {
     return (struct State) {
         .seed = time(NULL),
         .total_winners = NUM_WIN,
         .def_rand = DEFAULT_RANDOMNESS,
-        .parent = malloc(sizeof(struct Program) * NUM_WIN),
-        .children = malloc(sizeof(struct Program) * NUM_WIN * NUM_WIN),
+        .parent = (Program *)malloc(sizeof(struct Program) * NUM_WIN),
+        .children = (Program *)malloc(sizeof(struct Program) * NUM_WIN * NUM_WIN),
     };
 }

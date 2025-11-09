@@ -13,7 +13,7 @@ bool cli_interpret(struct State state) {
     double time_taken = (clock() - last) / CLOCKS_PER_SEC;
     last = clock();
     average = (average * (state.runs - 1) + time_taken) / state.runs;
-    printf("Winner of generation %d won with a score of %ld, size %ld, looptime %ld (%d previously wins) (seed is %d). Time used %lf (average is %lf).\n", 
+    printf("Winner of generation %d won with a score of %ld, size %ld, looptime %ld (%d previously wins) (seed is %ld). Time used %lf (average is %lf).\n", 
         state.runs, state.children[0].score, state.children[0].size, state.children[0].runtime, state.repetitions, state.seed,
         time_taken, average
     );

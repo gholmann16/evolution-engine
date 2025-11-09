@@ -43,10 +43,10 @@ void free_env() {
     munmap(program, 4096 * 256);
 }
 
-void run(struct Program * prog, char input[256], char output[256]) {
+void run(struct Program * prog, char input[256], char output[256], size_t max) {
     // clock_t begin = clock();
     int index = 0;
-    prog->runtime = max_runtime();
+    prog->runtime = max;
     // 1. rdi = pointer to memory space (aligned so as di will overflow back to the start
     // 2. rsi = initial counter, should be 0 unless you want to start with some already
     // 2. rdx = pointer to input (aligned so sil will overflow back to start)
@@ -144,7 +144,7 @@ void run(struct Program * prog, char input[256], char output[256]) {
     // begin = clock();
 
     fn jit_function = (fn)program;
-    jit_function(memory, max_runtime(), input, output);
+    jit_function(memory, max, input, output);
     size_t difference;
     asm("\t mov %%rsi,%0" : "=r"(difference)); // fetch rsi
     // char al = (char)rax;

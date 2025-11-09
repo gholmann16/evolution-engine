@@ -1,6 +1,9 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
 LDLIBS := -flto
 
+jit_different_tests.out: cli.o evolver.o brainfuck.o generator.o runner.o output.o crc8.o
+	g++ $(LDLIBS) cli.o crc8.o evolver.o brainfuck.o generator.o runner.o output.o -o jit_different_tests.out
+
 output.out: cli.o evolver.o brainfuck.o generator.o runner.o output.o
 	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o output.o -o output.out
 
@@ -29,11 +32,11 @@ compiler: standalone.o compiler.o vector.o
 assembler.o: jitfuck/assembler.c
 	gcc $(CFLAGS) jitfuck/assembler.c
 
-output.o: tests/output.c
-	gcc $(CFLAGS) tests/output.c
+output.o: tests/output.cpp
+	g++ $(CFLAGS) tests/output.cpp
 
-crc8.o: tests/crc8.c
-	gcc $(CFLAGS) tests/crc8.c
+crc8.o: tests/crc8.cpp
+	g++ $(CFLAGS) tests/crc8.cpp
 
 runner.o: runner.c
 	gcc $(CFLAGS) runner.c
@@ -41,8 +44,8 @@ runner.o: runner.c
 main.o: main.c
 	gcc $(CFLAGS) main.c 
 
-evolver.o: evolver.c
-	gcc $(CFLAGS) evolver.c
+evolver.o: evolver.cpp
+	g++ $(CFLAGS) evolver.cpp
 
 vector.o: sucrisc/vector.c
 	gcc $(CFLAGS) sucrisc/vector.c
@@ -67,3 +70,4 @@ generator.o: brainfuck/generator.c
 
 clean:
 	rm *.o
+	rm *.out

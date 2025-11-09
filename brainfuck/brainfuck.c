@@ -43,9 +43,9 @@ bool validate(struct Program prog) {
     return false;
 }
 
-void run(struct Program * prog, char input[256], char output[256]) {
+void run(struct Program * prog, char input[256], char output[256], size_t max) {
     if(validate(*prog) == true) {
-        prog->runtime = max_runtime();
+        prog->runtime = max;
         return; // Punishment for failing
     }
 
@@ -83,7 +83,7 @@ void run(struct Program * prog, char input[256], char output[256]) {
                 }
                 // Could do x-- and break, or just continue
             case ']':
-                if (++prog->runtime == max_runtime())
+                if (++prog->runtime == max)
                     return;
                 if (memory[location])
                     x = jump_points[jump_pointer - 1];
@@ -107,7 +107,4 @@ void run(struct Program * prog, char input[256], char output[256]) {
                 exit(-1);
         }
     }
-
-    if (!exact())
-        output[out_dex] = 0;
 }
