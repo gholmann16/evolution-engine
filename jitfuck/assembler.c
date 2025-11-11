@@ -8,7 +8,7 @@
 #include "crcbf.h"
 
 struct Program ancestor_prog() {
-    char * code = "+";
+    char * code = crc_bf;
     struct Program def = {0};
     strcpy(def.code, code);
     def.size = strlen(code);
@@ -19,9 +19,6 @@ void append(char * str, int * str_size, const char * app, int app_size) {
     for(int i = 0; i < app_size; i++)
         str[(*str_size)++] = app[i];
 }
-
-// Takes three pointers and returns rax
-typedef size_t (*fn)(unsigned char * memory, size_t runs, char * input, char * output);
 
 char * program;
 
@@ -51,9 +48,6 @@ void run(struct Program * prog, char input[256], char output[256], size_t max) {
     // 2. rsi = initial counter, should be 0 unless you want to start with some already
     // 2. rdx = pointer to input (aligned so sil will overflow back to start)
     // 3. rcx = pointer to output (aligned so dl will overflow back to start)
-
-    // rcx - not passed, used as a temporary variable for io
-    // rax - counter of instructions
 
     // RDI is the memory pointer
     char rig[] = {0x66, 0xFF, 0xC7}; // inc di
@@ -143,13 +137,21 @@ void run(struct Program * prog, char input[256], char output[256], size_t max) {
     // printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
     // begin = clock();
 
-    fn jit_function = (fn)program;
-    jit_function(memory, max, input, output);
     size_t difference;
-    asm("\t mov %%rsi,%0" : "=r"(difference)); // fetch rsi
+    asm volatile(
+        "call *%[fn]"
+        : "=S" (difference) // rsi -> difference
+        : [fn] "r" (program),
+            "D" (memory), // rdi = memory
+            "S" (max), // rsi = max runs
+            "d" (input), // rdx = input
+            "c" (output) // rcx = output
+        : "rax", "memory"
+    );
     // char al = (char)rax;
     // end = clock();
     prog->runtime -= difference;
+    // printf("here, looptime %ld %ld, %p, %d\n", prog->runtime, difference, input, strlen(input));
     // printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
     // printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
 

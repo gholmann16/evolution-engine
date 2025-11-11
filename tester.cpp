@@ -3,17 +3,19 @@
 #include <time.h>
 #include <stdlib.h>
 #include "evolver.h"
+#include "tests/test.hpp"
+
+Test * tester = create_crc8();
 
 int main() {
     init_env();
     struct Program prog = ancestor_prog();
-    alignas(256) char input[256] = "hello brainfucke";
+    alignas(256) char input[256] = {"hello brainfucke"};
     char expect[256];
-    expect[0] = 0x64;
-    expect[1] = 0;
+    tester->answer(input, expect);
     alignas(256) char output[256] = {0};
-    run(&prog, input, output, 20000000);
-    if (prog.runtime == 20000000)
+    run(&prog, input, output, tester->max_runtime());
+    if (prog.runtime == tester->max_runtime())
         puts("exit");
 
     int diff = strlen(expect) - strlen(output);
@@ -24,8 +26,8 @@ int main() {
         printf("at %d %02x and %02x are different\n", ch, expect[ch], output[ch]);
     }
     printf("initial score of %ld, %ld, %ld, output %s vs %s\n", prog.score, prog.size, prog.runtime, output, expect);
-    free_env();
 
+    free_env();
     // char output[256] = {0};
     // clock_t begin = clock();
     // run(&prog, input, output);

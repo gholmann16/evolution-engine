@@ -5,10 +5,10 @@
 #include <evolver.h>
 #include "tests/test.hpp"
 
-#define NUM_WIN 100
+#define NUM_WIN 10
 #define DEFAULT_RANDOMNESS 1050
 
-static Test * tester = create_output();
+static Test * tester = create_crc8();
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order

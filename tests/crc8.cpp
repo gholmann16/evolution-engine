@@ -51,7 +51,7 @@ class Crc8 : public Test {
         }
 
         unsigned long long max_runtime() override {
-            return 2000000;
+            return 1000000000;
         }
 
         const char * allowed_chars() override {
