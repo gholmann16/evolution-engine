@@ -1,8 +1,8 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
 LDLIBS := -flto
 
-jit_different_tests.out: cli.o evolver.o assembler.o generator.o runner.o output.o crc8.o
-	g++ $(LDLIBS) cli.o crc8.o evolver.o assembler.o generator.o runner.o output.o -o jit_different_tests.out
+jit_different_tests.out: cli.o evolver.o assembler.o generator.o runner.o output.o tictactoe.o crc8.o
+	g++ $(LDLIBS) cli.o crc8.o evolver.o assembler.o generator.o runner.o output.o tictactoe.o -o jit_different_tests.out
 
 output.out: cli.o evolver.o brainfuck.o generator.o runner.o output.o
 	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o output.o -o output.out
@@ -28,6 +28,9 @@ compiler: standalone.o compiler.o vector.o
 	gcc $(LDLIBS) standalone.o compiler.o vector.o -o compiler
 
 # Objects
+
+tictactoe.o: tests/tictactoe.cpp
+	gcc $(CFLAGS) tests/tictactoe.cpp
 
 assembler.o: jitfuck/assembler.c
 	gcc $(CFLAGS) jitfuck/assembler.c

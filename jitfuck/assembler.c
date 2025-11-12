@@ -8,7 +8,7 @@
 #include "crcbf.h"
 
 struct Program ancestor_prog() {
-    char * code = crc_bf;
+    char * code = ",[>,]>++++.";
     struct Program def = {0};
     strcpy(def.code, code);
     def.size = strlen(code);

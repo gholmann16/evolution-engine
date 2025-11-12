@@ -4,6 +4,8 @@
 
 // Needed for little endian
 #define SWAP(x) ((x>>8) & 0xff) | ((x & 0xff)<<8)
+#define NUM_TRIES 3
+size_t LOOP_MAX = 1000000000;
 
 class Crc8 : public Test {
     private:
@@ -30,28 +32,42 @@ class Crc8 : public Test {
         }
 
     public:
-        void answer(char input[256], char expect[256]) override {
-            fill_string(input);
+        void prepare_answer() override {
             char tmp[256];
-            memcpy(tmp, input, 256);
-            expect[0] = crc8(tmp);
-            expect[1] = 0;
+            for (int i = 0; i < NUM_TRIES; i++) {
+                free(inputs[i]);
+                free(expect[i]);
+                inputs[i] = (char *)malloc(256);
+                fill_string(inputs[i]);
+                expect[i] = (char *)malloc(2);
+
+                memcpy(tmp, inputs[i], 256);
+                expect[i][0] = crc8(tmp);
+                expect[i][1] = 0;
+            }
         }
 
-        bool read_all() override {
-            return false;
+        void score(struct Program * prog) {
+            int times = 0;
+            while (prog->runtime != LOOP_MAX) {
+                alignas(256) char output[256] = {0};
+                alignas(256) char input[256];
+                memcpy(input, inputs[times], 256);
+                run(prog, &input[times], &output[times], LOOP_MAX);
+
+                if (prog->runtime == LOOP_MAX || expect[times][0] != output[0]) {
+                    prog->score = LOOP_MAX * 50;
+                    return;
+                }
+
+                times++;
+            }
+
+            prog->score = prog->runtime + prog->size * 5;
         }
 
-        bool exact() override {
-            return true;
-        }
-
-        int reps() override {
-            return 3;
-        }
-
-        unsigned long long max_runtime() override {
-            return 1000000000;
+        void display(struct Program * prog) override {
+            ;
         }
 
         const char * allowed_chars() override {

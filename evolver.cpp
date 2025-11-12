@@ -2,13 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <evolver.h>
 #include "tests/test.hpp"
 
-#define NUM_WIN 10
+#define NUM_WIN 100
 #define DEFAULT_RANDOMNESS 1050
 
-static Test * tester = create_crc8();
+static Test * tester = create_tictactoe();
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -23,45 +22,6 @@ bool compare_code(struct Program first, struct Program second) {
         if (first.code[i] != second.code[i]) // Compare as strings rather than voids
             return true;
     return false;
-}
-
-void score(struct Program * prog, char * inputs, char * expect) {
-    prog->score = 0;
-
-    for (int test = 0; test < tester->reps(); test++) {
-        alignas(256) char output[256] = {0};
-        run(prog, inputs + (test * 256), output, tester->max_runtime());
-        if (prog->runtime == tester->max_runtime())
-            break;
-
-        if (tester->read_all())
-            for (int ch = 0; ch < 256; ch++) {
-                prog->score += abs(output[ch] - expect[test * 256 + ch]);
-            }
-        else {
-            int diff = strlen(expect + (test * 256)) - strlen(output);
-            int max = (diff < 0) ? strlen(expect + (test * 256)) : strlen(output);
-            prog->score += 255 * abs(diff);
-            for (int ch = 0; ch < max; ch++) {
-                prog->score += abs(expect[test * 256 + ch] - output[ch]);
-            }
-        }
-    }
-
-    if (prog->runtime == tester->max_runtime())
-        prog->score = tester->max_runtime() * 50;
-    else if (tester->exact()) {
-        if (prog->score)
-            prog->score = tester->max_runtime();
-        else
-            prog->score = prog->runtime + prog->size * 5;
-    }
-    else { // fuzzy
-        if (prog->score)
-            prog->score = prog->score * 50 + prog->size;
-        else
-            prog->score = 0;
-    }
 }
 
 // Returns true if repeat
@@ -81,16 +41,10 @@ extern "C" bool generation(struct State state) {
             state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions, tester->allowed_chars());
     }
 
-    alignas(256) char * inputs = (char *)malloc(tester->reps() * 256);
-    char * expect = (char *)malloc(tester->reps() * 256);
-    for (int test = 0; test < tester->reps(); test++) {
-        tester->answer(inputs + (test * 256), expect + (test * 256));
-    }
+    tester->prepare_answer();
     for (int i = 0; i < state.total_winners * state.total_winners; i++) {
-        score(&(state.children[i]), inputs, expect);
+        tester->score(&(state.children[i]));
     }
-    free(inputs);
-    free(expect);
 
     qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
     bool rep = !compare_code(state.children[0], state.parent[0]);
