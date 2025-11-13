@@ -6,6 +6,38 @@
 #include <time.h>
 #include "brainfuck_base.hpp"
 
+// 1. rdi = pointer to memory space (aligned so as di will overflow back to the start
+// 2. rsi = initial counter, should be 0 unless you want to start with some already
+// 2. rdx = pointer to input (aligned so sil will overflow back to start)
+// 3. rcx = pointer to output (aligned so dl will overflow back to start)
+
+// RDI is the memory pointer
+unsigned char rig[] = {0x66, 0xFF, 0xC7}; // inc di
+unsigned char lef[] = {0x66, 0xFF, 0xCF}; // dec di
+unsigned char inc[] = {0xFE, 0x07}; // inc byte ptr[rdi]
+unsigned char dec[] = {0xFE, 0x0F}; // dec byte ptr[rdi]
+unsigned char com[] = {
+    0x8A, 0x02, // mov al, byte ptr[rdx] (move input into temporary register)
+    0x88, 0x07, // mov byte ptr[rdi], al
+    0xFE, 0xC2, // inc dl
+};
+unsigned char per[] = {
+    0x8A, 0x07, // mov al, byte ptr[rdi] (move current to temp)
+    0x88, 0x01, // mov byte ptr[rcx], al (move temp to output)
+    0xFE, 0xC1, // inc cl
+};
+unsigned char open[] = {
+    0xE9, 0x00, 0x00, 0x00, 0x00, // jmp + offset, have to go fill the offset.
+};
+unsigned char close[] = {
+    0x48, 0xff, 0xce, // dec rsi
+    0x48, 0x85, 0xF6, // test rsi, rsi
+    0x75, 0x01, // jnz SHORT 1
+    0xC3, // ret
+    0xF6, 0x07, 0xFF, // test byte ptr [rdi], 0xFF
+    0x0F, 0x85, 0x00, 0x00, 0x00, 0x00, // jnz + offset, have to fill the offset
+};
+
 class JitFuck : public Brainfuck_Base {
     private:
         void append(char * str, int * str_size, unsigned char * app, int app_size) {
@@ -14,9 +46,10 @@ class JitFuck : public Brainfuck_Base {
         }
 
         char * program;
+        const char * last = NULL;
 
     public:
-        JitFuck(const char * initial) : Brainfuck_Base(initial) {
+        JitFuck(char * initial) : Brainfuck_Base(initial) {
             program = (char*) mmap(NULL, // address
                 4096 * 256, // page sizes are 4096, alloacte 256 so we always have space
                 PROT_READ | PROT_WRITE | PROT_EXEC,
@@ -34,41 +67,15 @@ class JitFuck : public Brainfuck_Base {
             munmap(program, 4096 * 256);
         }
 
-        void run(struct Program * prog, char input[256], char output[256], size_t max) {
+        size_t run(const std::string& code, char input[256], char output[256], size_t max) {
             // clock_t begin = clock();
             int index = 0;
-            prog->runtime = max;
-            // 1. rdi = pointer to memory space (aligned so as di will overflow back to the start
-            // 2. rsi = initial counter, should be 0 unless you want to start with some already
-            // 2. rdx = pointer to input (aligned so sil will overflow back to start)
-            // 3. rcx = pointer to output (aligned so dl will overflow back to start)
+            int brackets = 0;
 
-            // RDI is the memory pointer
-            unsigned char rig[] = {0x66, 0xFF, 0xC7}; // inc di
-            unsigned char lef[] = {0x66, 0xFF, 0xCF}; // dec di
-            unsigned char inc[] = {0xFE, 0x07}; // inc byte ptr[rdi]
-            unsigned char dec[] = {0xFE, 0x0F}; // dec byte ptr[rdi]
-            unsigned char com[] = {
-                0x8A, 0x02, // mov al, byte ptr[rdx] (move input into temporary register)
-                0x88, 0x07, // mov byte ptr[rdi], al
-                0xFE, 0xC2, // inc dl
-            };
-            unsigned char per[] = {
-                0x8A, 0x07, // mov al, byte ptr[rdi] (move current to temp)
-                0x88, 0x01, // mov byte ptr[rcx], al (move temp to output)
-                0xFE, 0xC1, // inc cl
-            };
-            unsigned char open[] = {
-                0xE9, 0x00, 0x00, 0x00, 0x00, // jmp + offset, have to go fill the offset.
-            };
-            unsigned char close[] = {
-                0x48, 0xff, 0xce, // dec rsi
-                0x48, 0x85, 0xF6, // test rsi, rsi
-                0x75, 0x01, // jnz SHORT 1
-                0xC3, // ret
-                0xF6, 0x07, 0xFF, // test byte ptr [rdi], 0xFF
-                0x0F, 0x85, 0x00, 0x00, 0x00, 0x00, // jnz + offset, have to fill the offset
-            };
+            if (code.data() == last)
+                goto execute;
+            else
+                last = code.data();
 
             /*
             !!
@@ -77,9 +84,8 @@ class JitFuck : public Brainfuck_Base {
             tried doing a 256 long array and directly accessing it and it wasn't any faster
             */
             int vec[65536];
-            int brackets = 0;
-            for (unsigned short x = 0; x < prog->size; x++) {
-                switch(prog->code[x]) {
+            for (unsigned short x = 0; x < code.size(); x++) {
+                switch(code[x]) {
                     case '>':
                         append(program, &index, rig, sizeof(rig));
                         break;
@@ -104,7 +110,7 @@ class JitFuck : public Brainfuck_Base {
                         break;
                     case ']':
                         if (brackets == 0)
-                            return;
+                            return max;
 
                         append(program, &index, close, sizeof(close));
                         int offset = vec[--brackets] - index;
@@ -118,14 +124,9 @@ class JitFuck : public Brainfuck_Base {
             program[index++] = 0xC3; // this is ret
 
             if (brackets != 0)
-                return;
-            
-            // for (int i = 0; i < index; i++) {
-            //     if (i % 30 == 0)
-            //         puts("");
-            //     printf("0x%02x ", program[i] & 0xff);
-            // }
+                return max;
 
+            execute:
             alignas(65536) unsigned char memory[65536] = {0};
             // clock_t end = clock();
             // printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
@@ -144,7 +145,7 @@ class JitFuck : public Brainfuck_Base {
             );
             // char al = (char)rax;
             // end = clock();
-            prog->runtime -= difference;
+            return max - difference;
             // printf("here, looptime %ld %ld, %p, %d\n", prog->runtime, difference, input, strlen(input));
             // printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
             // printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
@@ -152,6 +153,6 @@ class JitFuck : public Brainfuck_Base {
         }
 };
 
-Engine * create_jitfuck(const char * initial) {
+Engine * create_jitfuck(char * initial) {
     return new JitFuck(initial);
 }

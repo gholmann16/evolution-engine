@@ -49,13 +49,14 @@ class Crc8 : public Test {
 
         void score(struct Program * prog, Engine * engine) {
             int times = 0;
-            while (prog->runtime != LOOP_MAX) {
+            size_t runtime = 0;
+            while (times < NUM_TRIES) {
                 alignas(256) char output[256] = {0};
                 alignas(256) char input[256];
                 memcpy(input, inputs[times], 256);
-                engine->run(prog, &input[times], &output[times], LOOP_MAX);
 
-                if (prog->runtime == LOOP_MAX || expect[times][0] != output[0]) {
+                runtime += engine->run(prog->code, &input[times], &output[times], LOOP_MAX - runtime);
+                if (runtime == LOOP_MAX || expect[times][0] != output[0]) {
                     prog->score = LOOP_MAX * 50;
                     return;
                 }
@@ -63,7 +64,7 @@ class Crc8 : public Test {
                 times++;
             }
 
-            prog->score = prog->runtime + prog->size * 5;
+            prog->score = runtime + prog->code.size() * 5;
         }
 
         void display(struct Program * prog, Engine * engine) override {

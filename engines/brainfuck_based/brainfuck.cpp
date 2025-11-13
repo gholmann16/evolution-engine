@@ -2,14 +2,15 @@
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
+#include <iostream>
 #include "brainfuck_base.hpp"
 
 class Brainfuck : public Brainfuck_Base {
     private:
-        bool validate(struct Program prog) {
+        bool validate(std::string code) {
             int open = 0;
-            for (size_t x = 0; x < prog.size; x++) {
-                switch (prog.code[x]) {
+            for (size_t x = 0; x < code.size(); x++) {
+                switch (code[x]) {
                     case '[':
                         open++;
                         break;
@@ -26,27 +27,26 @@ class Brainfuck : public Brainfuck_Base {
             return false;
         }
     public:
-        Brainfuck(const char * initial) : Brainfuck_Base(initial) {
+        Brainfuck(char * initial) : Brainfuck_Base(initial) {
             ;
         }
 
-        void run(struct Program * prog, char input[256], char output[256], size_t max) {
-            if(validate(*prog) == true) {
-                prog->runtime = max;
-                return; // Punishment for failing
-            }
+        size_t run(const std::string& code, char input[256], char output[256], size_t max) {
+            if(validate(code) == true)
+                return max; // Punishment for failing
 
             unsigned char memory[65536] = {0};
-            unsigned short jump_points[MAX_SIZE / 2]; // Even if odd, can't have odd brackets
+            unsigned short jump_points[100000]; // hopefully not more than 100000 jumps
             unsigned short jump_pointer = 0;
 
             unsigned char out_dex = 0;
             unsigned char in_dex = 0;
             unsigned short location = 0;
+            size_t runtime = 0;
             int brackets;
 
-            for (size_t x = 0; x < prog->size; x++) {
-                switch(prog->code[x]) {
+            for (size_t x = 0; x < code.size(); x++) {
+                switch(code[x]) {
                     case '+': 
                         memory[location]++;
                         break;
@@ -64,15 +64,15 @@ class Brainfuck : public Brainfuck_Base {
                         brackets = 1;
                         while (brackets) {
                             x++;
-                            if (prog->code[x] == '[')
+                            if (code[x] == '[')
                                 brackets++;
-                            else if (prog->code[x] == ']')
+                            else if (code[x] == ']')
                                 brackets--;
                         }
                         // Could do x-- and break, or just continue
                     case ']':
-                        if (++prog->runtime == max)
-                            return;
+                        if (++runtime == max)
+                            return max;
                         if (memory[location])
                             x = jump_points[jump_pointer - 1];
                         else
@@ -89,15 +89,16 @@ class Brainfuck : public Brainfuck_Base {
                         break;
                     default:
                         puts("Unknown brainfuck command detected");
-                        printf("chracter hex: 0x%x\n", prog->code[x]);
+                        printf("chracter hex: 0x%x\n", code[x]);
                         puts("Code:");
-                        puts(prog->code);
+                        std::cout << code << std::endl;
                         exit(-1);
                 }
             }
+            return max;
         }
 };
 
-Engine * create_brainfuck(const char * initial) {
+Engine * create_brainfuck(char * initial) {
     return new Brainfuck(initial);
 }

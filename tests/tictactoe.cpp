@@ -36,12 +36,13 @@ class TicTacToe : public Test {
             board[spot] = player;
         }
 
+        size_t total_runtime;
         int play_game(struct Program * prog, Engine * engine, char board[256], char output[256]) {
             for (int spot = 0; spot < 9; spot++)
                 board[spot] = ' ';
 
-            engine->run(prog, board, output, MAX_RUNTIME);
-            if (prog->runtime == MAX_RUNTIME)
+            total_runtime += engine->run(prog->code, board, output, MAX_RUNTIME - total_runtime);
+            if (total_runtime == MAX_RUNTIME)
                 return MAX_RUNTIME;
             // probably faster to check 3 spots for x then compare with each other then check anyway lol
             place(board, output[0], 'X');
@@ -51,8 +52,8 @@ class TicTacToe : public Test {
                 if (won(board, 'O'))
                     return 5;
 
-                engine->run(prog, board, output, MAX_RUNTIME);
-                if (prog->runtime)
+                total_runtime += engine->run(prog->code, board, output, MAX_RUNTIME - total_runtime);
+                if (total_runtime == MAX_RUNTIME)
                     return MAX_RUNTIME;
 
                 place(board, output[0], 'X');
@@ -67,22 +68,22 @@ class TicTacToe : public Test {
         }
 
         void score(struct Program * prog, Engine * engine) override {
-            alignas(256) char output[256];
+            alignas(256) char output[256] = {0};
+            total_runtime = 0;
 
             int total = 0;
             for (int reps = 0; reps < REPS; reps++) {
                 alignas(256) char board[256] = {0};
 
-                int add = play_game(prog, engine, board, output);
-                if (add > MAX_RUNTIME) {
+                total += play_game(prog, engine, board, output);
+                if (total_runtime == MAX_RUNTIME) {
                     prog->score = MAX_RUNTIME * 50;
                     return;
                 }
-                total += add;
             }
 
             if (total)
-                prog->score = total * 50 + prog->size;
+                prog->score = total * 50 + prog->code.size();
             else
                 prog->score = 0;
         }

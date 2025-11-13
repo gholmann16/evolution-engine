@@ -2,12 +2,10 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
-#define MAX_SIZE 65533
+#include <string>
 
 struct Program {
-    char code[MAX_SIZE]; // No 0 at the end, don't use strlen
-    size_t size;
-    size_t runtime;
+    std::string code;
     size_t score;
 };
 
@@ -17,27 +15,25 @@ struct State {
     int total_winners;
     int def_rand;
     int repetitions;
-    struct Program * parent; // struct Program * total_winners
     struct Program * children; // struct Program * total_winners^2
 };
 
 class Engine {
     public:
-        // input read only, output should be non freeable memory, too many allocs otherwise
-        virtual void run(struct Program * prog, char input[256], char output[256], size_t max) = 0;
+        // input read only, output should be non freeable memory, too many allocs otherwise. Return looptime/runtime
+        virtual size_t run(const std::string& code, char input[256], char output[256], size_t max) = 0;
 
         // Evolving
-        virtual struct Program ancestor_prog() = 0;
-        virtual struct Program evolve(struct Program parent, size_t randomness, const char * allowed_chars) = 0; 
+        virtual std::string ancestor_prog() = 0;
+        virtual void evolve(const std::string& parent, std::string& child, size_t randomness, const char * allowed_chars) = 0; 
 
         // Utility
-        virtual char * debug(struct Program prog) = 0; // Should be an allocated string
-        virtual char * compile(struct Program program) = 0; // Allocated string ready to be passed to assembler
+        virtual std::string debug(const std::string&) = 0; // Should be an allocated string
+        virtual std::string compile(const std::string&) = 0; // Allocated string ready to be passed to assembler
 };
 
-Engine * create_brainfuck(const char * initial);
-Engine * create_jitfuck(const char * intial);
-
+Engine * create_brainfuck(char * initial);
+Engine * create_jitfuck(char * intial);
 
 class Test {
     public:

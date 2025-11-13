@@ -1,69 +1,52 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <iostream>
 #include <evolver.hpp>
 
 class Brainfuck_Base : public Engine {
+    private:
+        std::string initial;
+
     public:
-        Brainfuck_Base(const char * initial) {
-            this->initial = (initial == NULL) ? "+" : initial;
+        Brainfuck_Base(char * initial) {
+            this->initial = (initial == NULL) ? std::string("+") : std::string(initial);
         }
 
-        struct Program ancestor_prog() {
-            struct Program def = {0};
-            strcpy(def.code, initial);
-            def.size = strlen(initial);
-            return def;
+        std::string ancestor_prog() {
+            return initial;
         }
 
-        struct Program evolve(struct Program prog, size_t randomness, const char * chars) {
-            struct Program child;
-            child.size = 0;
-            child.runtime = 0;
-            child.score = 0;
-
-            int max_additions = MAX_SIZE - prog.size;
-            int added = 0;
+        void evolve(const std::string& parent, std::string& child, size_t randomness, const char * chars) {
             int len = strlen(chars);
+            child.clear();
 
-            for (size_t gene = 0; gene < prog.size; gene++) {
+            for (size_t gene = 0; gene < parent.size(); gene++) {
                 int decision = rand() % randomness;
                 switch (decision) {
                     case 0: // 1 % chance you remove code
-                        added--;
                         break;
                     case 1: // 1 % chance you add code
-                        if (added < max_additions) {
-                            added++;
-                            gene--;
-                            child.code[child.size++] = chars[rand() % len];
-                        }
+                        gene--;
+                        child += chars[rand() % len];
                         break;
                     case 2:
                     case 3: // 3% chance you modify
                     case 4:
-                        child.code[child.size++] = chars[rand() % len];
+                        child += chars[rand() % len];
                         break;
                     default: // 95 % chance you do nothing (slightly more because additions go here after)
-                        child.code[child.size++] = prog.code[gene];
+                        child += parent[gene];
                         break;
                 }
             }
-
-            return child;
         }
 
-        char * debug(struct Program prog) {
-            char * ret = (char *) malloc(prog.size + 1);
-            memcpy(ret, prog.code, prog.size);
-            ret[prog.size] = 0;
-            return ret;
+        std::string debug(const std::string& code) {
+            return code;
         }
 
-        char * compile(struct Program prog) {
+        std::string compile(const std::string& code) {
             return NULL;
         }
-
-    private:
-        const char * initial;
 };
