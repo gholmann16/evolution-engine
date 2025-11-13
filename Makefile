@@ -1,6 +1,9 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
 LDLIBS := -flto
 
+monolith.out: cli.o runner.o evolver.o assembler.o brainfuck.o output.o tictactoe.o crc8.o
+	g++ $(LDLIBS) cli.o runner.o evolver.o assembler.o brainfuck.o output.o tictactoe.o crc8.o -o monolith.out
+
 jit_different_tests.out: cli.o evolver.o assembler.o generator.o runner.o output.o tictactoe.o crc8.o
 	g++ $(LDLIBS) cli.o crc8.o evolver.o assembler.o generator.o runner.o output.o tictactoe.o -o jit_different_tests.out
 
@@ -29,11 +32,14 @@ compiler: standalone.o compiler.o vector.o
 
 # Objects
 
+cli.o: cli.cpp
+	g++ $(CFLAGS) cli.cpp
+
 tictactoe.o: tests/tictactoe.cpp
 	gcc $(CFLAGS) tests/tictactoe.cpp
 
-assembler.o: jitfuck/assembler.c
-	gcc $(CFLAGS) jitfuck/assembler.c
+assembler.o: engines/brainfuck_based/assembler.cpp
+	g++ $(CFLAGS) engines/brainfuck_based/assembler.cpp
 
 output.o: tests/output.cpp
 	g++ $(CFLAGS) tests/output.cpp
@@ -41,8 +47,8 @@ output.o: tests/output.cpp
 crc8.o: tests/crc8.cpp
 	g++ $(CFLAGS) tests/crc8.cpp
 
-runner.o: runner.c
-	gcc $(CFLAGS) runner.c
+runner.o: runner.cpp
+	g++ $(CFLAGS) runner.cpp
 
 main.o: main.c
 	gcc $(CFLAGS) main.c 
@@ -62,14 +68,8 @@ compiler.o: sucrisc/compiler.c
 sucrisc.o: sucrisc/sucrisc.c
 	gcc $(CFLAGS) sucrisc/sucrisc.c
 
-brainfuck.o: brainfuck/brainfuck.c
-	gcc $(CFLAGS) brainfuck/brainfuck.c
-
-generator.o: brainfuck/generator.c
-	gcc $(CFLAGS) brainfuck/generator.c
-
-# game.o: game.c
-# 	gcc -c -g game.c
+brainfuck.o: engines/brainfuck_based/brainfuck.cpp
+	g++ $(CFLAGS) engines/brainfuck_based/brainfuck.cpp
 
 clean:
 	rm *.o

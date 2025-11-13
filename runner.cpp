@@ -2,8 +2,10 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <evolver.h>
 #include <time.h>
+#include <evolver.hpp>
+
+#define EXECUTIONS 10000000
 #define EXECUTIONS 10000000
 
 // Returns false = end program
@@ -43,8 +45,8 @@ struct State load(char * file) {
     FILE * in = fopen(file, "rb");
     struct State revived;
     fread(&revived, sizeof(struct State), 1, in);
-    revived.parent = malloc(sizeof(struct Program) * revived.total_winners);
-    revived.children = malloc(sizeof(struct Program) * revived.total_winners * revived.total_winners);
+    revived.parent = (struct Program *) malloc(sizeof(struct Program) * revived.total_winners);
+    revived.children = (struct Program *) malloc(sizeof(struct Program) * revived.total_winners * revived.total_winners);
     fread(revived.parent, sizeof(struct Program), revived.total_winners, in);
     fclose(in);
     return revived;
@@ -57,14 +59,15 @@ void quit(int sig) {
 }
 
 int runner(struct State state) {
-    init_env();
     signal(SIGINT, quit);
+    Test * tester = create_output();
+    Engine * engine = create_jitfuck(",[>,]>++++.");
     // Set the default
     for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
-        state.parent[ancestor] = ancestor_prog();
+        state.parent[ancestor] = engine->ancestor_prog();
 
     while (running && state.runs < EXECUTIONS) {
-        bool repeat = generation(state);
+        bool repeat = generation(state, tester, engine);
         state.runs++;
         if (cli_interpret(state) == false)
             break;
@@ -76,6 +79,5 @@ int runner(struct State state) {
 
     free(state.parent);
     free(state.children);
-    free_env();
     return 0;
 }

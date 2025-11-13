@@ -1,5 +1,5 @@
 #include <string.h>
-#include "test.hpp"
+#include <evolver.hpp>
 
 #define MAX_RUNTIME 100000
 
@@ -8,11 +8,11 @@ class Output : public Test {
         void prepare_answer() override {
             ;
         }
-        void score(struct Program * prog) override {
+        void score(struct Program * prog, Engine * engine) override {
             alignas(256) char empty_input[256] = {0};
             alignas(256) char output[256] = {0};
             prog->score = 0;
-            run(prog, empty_input, output, MAX_RUNTIME);
+            engine->run(prog, empty_input, output, MAX_RUNTIME);
             if (prog->runtime == MAX_RUNTIME) {
                 prog->score = MAX_RUNTIME * 50;
                 return;
@@ -34,10 +34,10 @@ class Output : public Test {
             }
         }
 
-        void display(struct Program * prog) override {
+        void display(struct Program * prog, Engine * engine) override {
             char empty_input[256] = {0};
             char output[256] = {0};
-            run(prog, empty_input, output, MAX_RUNTIME);
+            engine->run(prog, empty_input, output, MAX_RUNTIME);
             puts(output);
         }
 

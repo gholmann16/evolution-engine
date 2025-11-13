@@ -1,1 +1,0 @@
-int game(char * code);

@@ -1,4 +1,4 @@
-#include "test.hpp"
+#include <evolver.hpp>
 
 #define MAX_RUNTIME 100
 #define REPS 100
@@ -36,11 +36,11 @@ class TicTacToe : public Test {
             board[spot] = player;
         }
 
-        int play_game(struct Program * prog, char board[256], char output[256]) {
+        int play_game(struct Program * prog, Engine * engine, char board[256], char output[256]) {
             for (int spot = 0; spot < 9; spot++)
                 board[spot] = ' ';
 
-            run(prog, board, output, MAX_RUNTIME);
+            engine->run(prog, board, output, MAX_RUNTIME);
             if (prog->runtime == MAX_RUNTIME)
                 return MAX_RUNTIME;
             // probably faster to check 3 spots for x then compare with each other then check anyway lol
@@ -50,11 +50,13 @@ class TicTacToe : public Test {
                 place(board, 255, 'O');
                 if (won(board, 'O'))
                     return 5;
-                run(prog, board, output, MAX_RUNTIME);
-                place(board, output[0], 'X');
+
+                engine->run(prog, board, output, MAX_RUNTIME);
                 if (prog->runtime)
                     return MAX_RUNTIME;
-                else if (won(board, 'X'))
+
+                place(board, output[0], 'X');
+                if (won(board, 'X'))
                     return 0;
             }
             return 1;
@@ -64,14 +66,14 @@ class TicTacToe : public Test {
             ;
         }
 
-        void score(struct Program * prog) override {
+        void score(struct Program * prog, Engine * engine) override {
             alignas(256) char output[256];
 
             int total = 0;
             for (int reps = 0; reps < REPS; reps++) {
                 alignas(256) char board[256] = {0};
 
-                int add = play_game(prog, board, output);
+                int add = play_game(prog, engine, board, output);
                 if (add > MAX_RUNTIME) {
                     prog->score = MAX_RUNTIME * 50;
                     return;
@@ -85,7 +87,7 @@ class TicTacToe : public Test {
                 prog->score = 0;
         }
 
-        void display(struct Program * prog) override {
+        void display(struct Program * prog, Engine * engine) override {
             ;
         }
 

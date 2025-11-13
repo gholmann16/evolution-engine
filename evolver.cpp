@@ -2,12 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "tests/test.hpp"
+#include <evolver.hpp>
 
 #define NUM_WIN 100
 #define DEFAULT_RANDOMNESS 1050
-
-static Test * tester = create_tictactoe();
 
 int compare_ratings(const void * first, const void * second) {
     // First minus second because we now want to sort in ascending order
@@ -25,7 +23,7 @@ bool compare_code(struct Program first, struct Program second) {
 }
 
 // Returns true if repeat
-extern "C" bool generation(struct State state) {
+bool generation(struct State state, Test * tester, Engine * engine) {
     // Determinism
     srand(state.seed + state.runs);
 
@@ -38,12 +36,12 @@ extern "C" bool generation(struct State state) {
 
         // Other grandchildren slightly modified, reset by evolve()
         for (int grandchild = 1; grandchild < state.total_winners; grandchild++)
-            state.children[winner * state.total_winners + grandchild] = evolve(state.parent[winner], state.def_rand - state.repetitions, tester->allowed_chars());
+            state.children[winner * state.total_winners + grandchild] = engine->evolve(state.parent[winner], state.def_rand - state.repetitions, tester->allowed_chars());
     }
 
     tester->prepare_answer();
     for (int i = 0; i < state.total_winners * state.total_winners; i++) {
-        tester->score(&(state.children[i]));
+        tester->score(&(state.children[i]), engine);
     }
 
     qsort(state.children, state.total_winners * state.total_winners, sizeof(struct Program), compare_ratings);
@@ -72,7 +70,7 @@ extern "C" bool generation(struct State state) {
     return rep;
 }
 
-extern "C" struct State def_state() {
+struct State def_state() {
     return (struct State) {
         .seed = time(NULL),
         .total_winners = NUM_WIN,
