@@ -72,10 +72,10 @@ class JitFuck : public Brainfuck_Base {
             int index = 0;
             int brackets = 0;
 
-            if (code.data() == last)
-                goto execute;
-            else
-                last = code.data();
+            // if (code.data() == last)
+            //     goto execute;
+            // else
+            //     last = code.data();
 
             /*
             !!

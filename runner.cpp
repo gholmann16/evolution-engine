@@ -5,8 +5,8 @@
 #include <time.h>
 #include <evolver.hpp>
 #include <iostream>
+#include <crcbf.h>
 
-#define EXECUTIONS 10000000
 #define EXECUTIONS 10000000
 
 // Returns false = end program
@@ -64,8 +64,8 @@ void quit(int sig) {
 
 int runner(struct State state) {
     signal(SIGINT, quit);
-    Test * tester = create_output();
-    Engine * engine = create_jitfuck("+");
+    Test * tester = create_tictactoe();
+    Engine * engine = create_jitfuck("++++.");
     // Set the default
     for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
         state.children[ancestor].code = engine->ancestor_prog();
@@ -81,6 +81,6 @@ int runner(struct State state) {
     // if (running == false)
         // save(state);
 
-    free(state.children);
+    delete state.children;
     return 0;
 }
