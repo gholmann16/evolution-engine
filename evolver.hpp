@@ -1,21 +1,13 @@
 #pragma once
 #include <stddef.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string>
+
+#define VERBOSE true
 
 struct Program {
     std::string code;
     size_t score;
-};
-
-struct State {
-    long int seed;
-    int runs;
-    int total_winners;
-    int def_rand;
-    int repetitions;
-    struct Program * children; // struct Program * total_winners^2
 };
 
 class Engine {
@@ -45,18 +37,7 @@ class Test {
     protected:
         char ** inputs = (char **)calloc(10, sizeof(char *)); // up to 10 tests
         char ** expect = (char **)calloc(10, sizeof(char *)); // up to 10 tests
-        void fill_string(char input[256]) {
-            for (int i = 0; i < 255; i++) {
-                input[i] = rand() % 256;
-            }
-            input[255] = 0;
-        }
 
-        void empty(char input[256]) {
-            for (int i = 0; i < 255; i++) {
-                input[i] = 0;
-            }
-        }
         ~Test() {
             free(inputs);
             free(expect);
@@ -67,9 +48,3 @@ class Test {
 Test * create_crc8();
 Test * create_output();
 Test * create_tictactoe();
-
-// Init
-struct State def_state();
-
-// Executing
-bool generation(struct State state, Test * engine, Engine * tester);

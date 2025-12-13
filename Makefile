@@ -1,23 +1,8 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations
 LDLIBS := -flto
 
-monolith.out: cli.o runner.o evolver.o assembler.o brainfuck.o output.o tictactoe.o crc8.o
-	g++ $(LDLIBS) cli.o runner.o evolver.o assembler.o brainfuck.o output.o tictactoe.o crc8.o -o monolith.out
-
-jit_different_tests.out: cli.o evolver.o assembler.o generator.o runner.o output.o tictactoe.o crc8.o
-	g++ $(LDLIBS) cli.o crc8.o evolver.o assembler.o generator.o runner.o output.o tictactoe.o -o jit_different_tests.out
-
-output.out: cli.o evolver.o brainfuck.o generator.o runner.o output.o
-	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o output.o -o output.out
-
-crc8.out: cli.o evolver.o brainfuck.o generator.o runner.o crc8.o
-	gcc $(LDLIBS) cli.o evolver.o brainfuck.o generator.o runner.o crc8.o -o crc8.out
-
-jit_output.out: cli.o evolver.o assembler.o generator.o runner.o output.o
-	gcc $(LDLIBS) cli.o evolver.o assembler.o generator.o runner.o output.o -o jit_output.out
-
-jit_crc8.out: cli.o evolver.o assembler.o generator.o runner.o crc8.o
-	gcc $(LDLIBS) cli.o evolver.o assembler.o generator.o runner.o crc8.o -o jit_crc8.out
+monolith.out: cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o
+	g++ $(LDLIBS) cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o -o monolith.out
 
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`
@@ -31,6 +16,9 @@ compiler: standalone.o compiler.o vector.o
 	gcc $(LDLIBS) standalone.o compiler.o vector.o -o compiler
 
 # Objects
+
+network.o: engines/neural_based/network.cpp
+	g++ $(CFLAGS) engines/neural_based/network.cpp
 
 cli.o: cli.cpp
 	g++ $(CFLAGS) cli.cpp
@@ -53,8 +41,8 @@ runner.o: runner.cpp
 main.o: main.c
 	gcc $(CFLAGS) main.c 
 
-evolver.o: evolver.cpp
-	g++ $(CFLAGS) evolver.cpp
+state.o: state.cpp
+	g++ $(CFLAGS) state.cpp
 
 vector.o: sucrisc/vector.c
 	gcc $(CFLAGS) sucrisc/vector.c

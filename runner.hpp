@@ -1,5 +1,4 @@
-#include <evolver.hpp>
+#include <state.hpp>
 
 // Running
-struct State load(char * file);
 int runner(struct State);

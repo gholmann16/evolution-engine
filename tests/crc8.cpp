@@ -31,6 +31,13 @@ class Crc8 : public Test {
             return input[size];
         }
 
+        void fill_string(char input[256]) {
+            for (int i = 0; i < 255; i++) {
+                input[i] = rand() % 256;
+            }
+            input[255] = 0;
+        }
+
     public:
         void prepare_answer() override {
             char tmp[256];
