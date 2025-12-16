@@ -126,7 +126,7 @@ class JitFuck : public Brainfuck_Base {
             if (brackets != 0)
                 return max;
 
-            execute:
+            // execute:
             alignas(65536) unsigned char memory[65536] = {0};
             // clock_t end = clock();
             // printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);

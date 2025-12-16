@@ -94,7 +94,6 @@ bool cli_interpret(struct State state) {
         state.runs, state.children[0].score, state.children[0].code.size(), state.repetitions, state.seed,
         time_taken, average
     );
-    std::cout << state.children[0].code << std::endl;
 
     if (state.children[0].score == 0) {
         puts("Solved");
@@ -117,7 +116,7 @@ void quit(int sig) {
 int runner(struct State state) {
     signal(SIGINT, quit);
     Test * tester = create_tictactoe();
-    Engine * engine = create_jitfuck("++++.");
+    Engine * engine = create_network();
     // Set the default
     for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
         state.children[ancestor].code = engine->ancestor_prog();
@@ -125,6 +124,7 @@ int runner(struct State state) {
     while (running && state.runs < EXECUTIONS) {
         bool repeat = generation(state, tester, engine);
         state.runs++;
+        std::cout << engine->debug(state.children[0].code) << std::endl;
         if (cli_interpret(state) == false)
             break;
         state.repetitions = repeat*state.repetitions + repeat; // Add 1 if it repeated

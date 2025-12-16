@@ -23,20 +23,22 @@ class TicTacToe : public Test {
                 return false;
         }
 
-        void place(char board[256], unsigned char spot, char player) {
-            while (spot >= 9 || board[spot] != ' ')
-                spot = (spot + 1) % 9;
-            board[spot] = player;
+        bool place(char board[256], unsigned char spot, char player) {
+            if (board[spot] == ' ') {
+                board[spot] = player;
+                return false;
+            }
+            return true;
         }
 
         size_t total_runtime;
-        size_t play_game(struct Program * prog, Engine * engine, char board[256], char output[256]) {
+        size_t play_game(struct Program * prog, Engine * engine, char board[256], char output[256], int empty) {
             alignas(256) char save_board[256];
             int total_recursive_score = 0;
+
             for (int i = 0; i < 9 && total_runtime <= MAX_RUNTIME; i++) {
                 if (board[i] != ' ')
                     continue;
-                // printf("games %ld\n", played_games);
                 memcpy(save_board, board, 9);
                 save_board[i] = 'O';
                 if (won(save_board, 'O')) {
@@ -51,11 +53,28 @@ class TicTacToe : public Test {
                 // printf("%c | %c | %c\n", save_board[0], save_board[1], save_board[2]);
                 // printf("%c | %c | %c\n", save_board[3], save_board[4], save_board[5]);
                 // printf("%c | %c | %c\n", save_board[6], save_board[7], save_board[8]);
-                place(save_board, output[0], 'X');
+                if (place(save_board, output[0], 'X')) {
+                    // couldn't place it, so guaranteed did not win, also guaranteed not empty
+                    switch(empty) {
+                        case 8: // fucked up on the first turn, so essentially every move set starting by the second should count as lost
+                            total_recursive_score += 48;
+                            continue;
+                        case 6:
+                            total_recursive_score += 8;
+                            continue;
+                        case 4: // both games that would have ensued had this gone through are done
+                            total_recursive_score += 2;
+                            continue;
+                        case 2: // no games would be played, so this is a normal loss
+                            total_recursive_score += 1;
+                            continue;
+                    }
+                }
+                
                 if (won(save_board, 'X'))
                     total_recursive_score += 0;
-                else
-                    total_recursive_score += play_game(prog, engine, save_board, output);
+                else if (empty)
+                    total_recursive_score += play_game(prog, engine, save_board, output, empty - 2);
             }
             return total_recursive_score;
         }
@@ -66,12 +85,15 @@ class TicTacToe : public Test {
 
         void score(struct Program * prog, Engine * engine) override {
             alignas(256) char output[256] = {0};
-            alignas(256) char board[256] = {0};
-            for (int spot = 0; spot < 9; spot++)
-                board[spot] = ' ';
+            alignas(256) char board[256] = "         ";
+            size_t lost;
             total_runtime = engine->run(prog->code, board, output, MAX_RUNTIME);
-            place(board, output[0], 'X');
-            size_t lost = play_game(prog, engine, board, output);
+            if (place(board, output[0], 'X')) {
+                lost = 384;
+            }
+            else {
+                lost = play_game(prog, engine, board, output, 8);
+            }
 
             if (total_runtime >= MAX_RUNTIME) {
                 prog->score = MAX_RUNTIME * 50;

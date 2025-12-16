@@ -20,12 +20,13 @@ class Engine {
         virtual void evolve(const std::string& parent, std::string& child, size_t randomness, const char * allowed_chars) = 0; 
 
         // Utility
-        virtual std::string debug(const std::string&) = 0; // Should be an allocated string
-        virtual std::string compile(const std::string&) = 0; // Allocated string ready to be passed to assembler
+        virtual std::string debug(const std::string& code) = 0; // Should be an allocated string
+        virtual std::string compile(const std::string& code) = 0; // Allocated string ready to be passed to assembler
 };
 
 Engine * create_brainfuck(char * initial);
-Engine * create_jitfuck(char * intial);
+Engine * create_jitfuck(char * initial);
+Engine * create_network();
 
 class Test {
     public:
