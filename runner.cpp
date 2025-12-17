@@ -14,7 +14,10 @@ bool compare_ratings(const Program& first, const Program &second) {
     return first.score < second.score;
 }
 
-std::string last;
+struct Program last = {
+    .code = std::string(),
+    .score = 0,
+};
 
 // Returns true if repeat
 bool generation(struct State state, Test * tester, Engine * engine) {
@@ -64,7 +67,7 @@ bool generation(struct State state, Test * tester, Engine * engine) {
         * Conveniently, the worse dna of the batch because the winners will stay winners
         * Frees everything we need, since parent and children share a pool
         */
-        if (state.children[candidate].code != state.children[found - 1].code)
+        if (engine->equal(state.children[candidate].code, state.children[found - 1].code) == false)
             state.children[found++] = state.children[candidate];
     }
     while (found < state.total_winners)
@@ -74,10 +77,11 @@ bool generation(struct State state, Test * tester, Engine * engine) {
     if (VERBOSE)
         printf("Time sorting: %lf\n", (after - before) / CLOCKS_PER_SEC);
 
-    if (state.children[0].code == last)
+    // repeats. must be deterministic or score means nothing
+    if (state.children[0].score == last.score && engine->equal(state.children[0].code, last.code))
         return true;
 
-    last = state.children[0].code;
+    last = state.children[0];
     return false;
 }
 
@@ -122,12 +126,15 @@ int runner(struct State state) {
         state.children[ancestor].code = engine->ancestor_prog();
 
     while (running && state.runs < EXECUTIONS) {
-        bool repeat = generation(state, tester, engine);
+        if(generation(state, tester, engine))
+            state.repetitions++;
+        else
+            state.repetitions = 0;
+
         state.runs++;
         std::cout << engine->debug(state.children[0].code) << std::endl;
         if (cli_interpret(state) == false)
             break;
-        state.repetitions = repeat*state.repetitions + repeat; // Add 1 if it repeated
     }
 
     // if (running == false)

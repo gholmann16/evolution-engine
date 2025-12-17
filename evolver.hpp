@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string>
 
-#define VERBOSE true
+#define VERBOSE false
 
 struct Program {
     std::string code;
@@ -22,6 +22,9 @@ class Engine {
         // Utility
         virtual std::string debug(const std::string& code) = 0; // Should be an allocated string
         virtual std::string compile(const std::string& code) = 0; // Allocated string ready to be passed to assembler
+        virtual bool equal(const std::string& first, const std::string& second) {
+            return first == second;
+        }
 };
 
 Engine * create_brainfuck(char * initial);

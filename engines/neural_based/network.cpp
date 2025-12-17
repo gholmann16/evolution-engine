@@ -2,6 +2,7 @@
 #include <evolver.hpp>
 #include <set>
 #include <string>
+#include <cmath>
 #include <format>
 #define STARTING 20
 
@@ -52,16 +53,25 @@ class Network : public Engine {
                 switch(rand() % randomness) {
                     case 0: // 1 % chance you remove code
                         break;
-                    case 1: // 1 % chance you add code
+                    case 1: // 2 % chance you add code
+                    case 2:
                         i--;
                         temp = random_synapse();
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
-                    case 2:
-                    case 3: // 3% chance you change the multiplier
+                    case 3: // 5% chance you change the multiplier
                     case 4:
+                    case 5:
+                    case 6:
+                    case 7:
                         temp = connections[i];
-                        temp.multiplier += -0.1f + ((float)rand()) / RAND_MAX * (0.1f - -0.1f);
+                        temp.multiplier += -0.05f + ((float)rand()) / RAND_MAX * (0.05f - -0.05f);
+                        child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
+                        break;
+                    case 8:
+                    case 9:
+                        temp = connections[i];
+                        temp.multiplier += -0.25f + ((float)rand()) / RAND_MAX * (0.25f - -0.25f);
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
                     default: // 95 % chance you do nothing (slightly more because additions go here after)
@@ -78,7 +88,7 @@ class Network : public Engine {
             std::string graphviz;
             for (size_t i = 0; i < amount; i++) {
                 graphviz += std::format("{} -> {} [color=\"{}\", penwidth={}, label=\"{}\"];\n",
-                    connections[i].input, connections[i].output, (connections[i].multiplier > 0) ? "green" : "red", connections[i].multiplier, connections[i].multiplier);
+                    connections[i].input, connections[i].output, (connections[i].multiplier > 0) ? "green" : "red", std::fabs(connections[i].multiplier), connections[i].multiplier);
             }
             return graphviz;
         }
@@ -155,6 +165,26 @@ class Network : public Engine {
             }
             output[0] = best % 9;
             return 0;
+        }
+
+        bool equal(const std::string& first, const std::string& second) override {
+            const struct Synapse * first_connections = reinterpret_cast<const struct Synapse *>(first.data());
+            size_t first_amount = first.size() / sizeof(struct Synapse);
+            const struct Synapse * second_connections = reinterpret_cast<const struct Synapse *>(second.data());
+            size_t second_amount = second.size() / sizeof(struct Synapse);
+
+            if (first_amount != second_amount)
+                return false;
+
+            for (size_t i = 0; i < first_amount; i++) {
+                if (first_connections[i].input != second_connections[i].input || first_connections[i].output != second_connections[i].output)
+                    return false;
+                float difference = first_connections[i].multiplier - second_connections[i].multiplier;
+                if (difference > 0.05f && difference < -0.05f) {
+                    return false;
+                }
+            }
+            return true;
         }
 };
 

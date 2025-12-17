@@ -17,8 +17,14 @@ class TicTacToe : public Test {
                 (board[2] == player && board[5] == player && board[8] == player) ||
                 (board[0] == player && board[4] == player && board[8] == player) ||
                 (board[2] == player && board[4] == player && board[6] == player)
-            )
+            ) {
+                // printf("%c | %c | %c\n", board[0], board[1], board[2]);
+                // printf("%c | %c | %c\n", board[3], board[4], board[5]);
+                // printf("%c | %c | %c\n", board[6], board[7], board[8]);
+
+                // printf("%c Won!\n", player);
                 return true;
+            }
             else
                 return false;
         }
@@ -42,17 +48,10 @@ class TicTacToe : public Test {
                 memcpy(save_board, board, 9);
                 save_board[i] = 'O';
                 if (won(save_board, 'O')) {
-                    // printf("AI lost:\n");
-                    // printf("%c | %c | %c\n", save_board[0], save_board[1], save_board[2]);
-                    // printf("%c | %c | %c\n", save_board[3], save_board[4], save_board[5]);
-                    // printf("%c | %c | %c\n", save_board[6], save_board[7], save_board[8]);
                     total_recursive_score++;
                     continue;
                 }
                 total_runtime += engine->run(prog->code, save_board, output, MAX_RUNTIME - total_runtime);
-                // printf("%c | %c | %c\n", save_board[0], save_board[1], save_board[2]);
-                // printf("%c | %c | %c\n", save_board[3], save_board[4], save_board[5]);
-                // printf("%c | %c | %c\n", save_board[6], save_board[7], save_board[8]);
                 if (place(save_board, output[0], 'X')) {
                     // couldn't place it, so guaranteed did not win, also guaranteed not empty
                     switch(empty) {

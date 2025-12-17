@@ -2,7 +2,7 @@
 #include <evolver.hpp>
 #include <time.h>
 #define NUM_WIN 100
-#define DEFAULT_RANDOMNESS 100
+#define DEFAULT_RANDOMNESS 150
 
 struct State def_state() {
     return (struct State) {
