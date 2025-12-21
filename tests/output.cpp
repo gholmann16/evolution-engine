@@ -1,5 +1,5 @@
 #include <string.h>
-#include <evolver.hpp>
+#include "test.hpp"
 
 #define MAX_RUNTIME 100000
 
@@ -36,10 +36,6 @@ class Output : public Test {
             char output[256] = {0};
             engine->run(prog->code, empty_input, output, MAX_RUNTIME);
             puts(output);
-        }
-
-        const char * allowed_chars() override {
-            return "+-<>[].";
         }
 };
 

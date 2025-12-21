@@ -1,8 +1,8 @@
 CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations -std=c++20
 LDLIBS := -flto
 
-monolith.out: cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o
-	g++ $(LDLIBS) cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o -o monolith.out
+monolith.out: cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o tic_off.o network.o
+	g++ $(LDLIBS) cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o tic_off.o -o monolith.out
 
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`
@@ -16,6 +16,9 @@ compiler: standalone.o compiler.o vector.o
 	gcc $(LDLIBS) standalone.o compiler.o vector.o -o compiler
 
 # Objects
+
+tic_off.o: competitions/tic_off.cpp
+	g++ $(CFLAGS) competitions/tic_off.cpp
 
 network.o: engines/neural_based/network.cpp
 	g++ $(CFLAGS) engines/neural_based/network.cpp

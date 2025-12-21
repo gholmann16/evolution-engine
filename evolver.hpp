@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string>
 
-#define VERBOSE false
+#define VERBOSE true
 
 struct Program {
     std::string code;
@@ -17,7 +17,7 @@ class Engine {
 
         // Evolving
         virtual std::string ancestor_prog() = 0;
-        virtual void evolve(const std::string& parent, std::string& child, size_t randomness, const char * allowed_chars) = 0; 
+        virtual void evolve(const std::string& parent, std::string& child, size_t randomness) = 0; 
 
         // Utility
         virtual std::string debug(const std::string& code) = 0; // Should be an allocated string
@@ -30,25 +30,3 @@ class Engine {
 Engine * create_brainfuck(char * initial);
 Engine * create_jitfuck(char * initial);
 Engine * create_network();
-
-class Test {
-    public:
-        virtual void score(struct Program * prog, Engine * engine) = 0;
-        virtual void prepare_answer() = 0;
-        virtual const char * allowed_chars() = 0;
-        virtual void display(struct Program * prog, Engine * engine) = 0;
-
-    protected:
-        char ** inputs = (char **)calloc(10, sizeof(char *)); // up to 10 tests
-        char ** expect = (char **)calloc(10, sizeof(char *)); // up to 10 tests
-
-        ~Test() {
-            free(inputs);
-            free(expect);
-        }
-};
-
-// All the tests:
-Test * create_crc8();
-Test * create_output();
-Test * create_tictactoe();

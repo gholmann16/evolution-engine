@@ -1,4 +1,4 @@
-#include <evolver.hpp>
+#include "test.hpp"
 #include <string.h>
 #include <iostream>
 
@@ -107,10 +107,6 @@ class TicTacToe : public Test {
 
         void display(struct Program * prog, Engine * engine) override {
             ;
-        }
-
-        const char * allowed_chars() override {
-            return "+-<>[].,";
         }
 };
 

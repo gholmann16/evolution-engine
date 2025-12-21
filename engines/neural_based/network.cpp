@@ -43,7 +43,7 @@ class Network : public Engine {
             return std::string(reinterpret_cast<const char*>(connections), sizeof(connections));
         }
 
-        void evolve(const std::string& parent, std::string &child, size_t randomness, const char * allowed_chars) override {
+        void evolve(const std::string& parent, std::string &child, size_t randomness) override {
             const struct Synapse * connections = reinterpret_cast<const struct Synapse *>(parent.data());
             size_t amount = parent.size() / sizeof(struct Synapse);
             child.clear();

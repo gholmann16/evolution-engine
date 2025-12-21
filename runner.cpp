@@ -4,11 +4,13 @@
 #include <stdlib.h>
 #include <time.h>
 #include <evolver.hpp>
+#include <tests/test.hpp>
+#include <competitions/competition.hpp>
 #include <iostream>
 #include <crcbf.h>
 #include <state.hpp>
 #include <algorithm>
-
+#include <random>
 
 bool compare_ratings(const Program& first, const Program &second) {
     return first.score < second.score;
@@ -18,6 +20,31 @@ struct Program last = {
     .code = std::string(),
     .score = 0,
 };
+
+// Returns true if repeat
+void brutality(struct State state, Competition * competition, Engine * engine) {
+    size_t square = state.total_winners * state.total_winners;
+    double before = clock();
+    std::mt19937 g(state.repetitions + state.runs);
+    // Use std::begin and std::end for C-style arrays
+    std::shuffle(state.children, state.children + square, g);
+
+    double after = clock();
+    if (VERBOSE)
+        printf("Time randomizing: %lf\n", (after - before) / CLOCKS_PER_SEC);
+
+    before = clock();
+    for (size_t winner = 0; winner < square / 2; winner++) {
+        if (competition->fight(state.children[winner].code, state.children[square - winner - 1].code, engine))
+            engine->evolve(state.children[square - winner - 1].code, state.children[winner].code, state.def_rand);
+        else
+            engine->evolve(state.children[winner].code, state.children[square - winner - 1].code, state.def_rand);
+    }
+
+    after = clock();
+    if (VERBOSE)
+        printf("Time competing and evolving: %lf\n", (after - before) / CLOCKS_PER_SEC);
+}
 
 // Returns true if repeat
 bool generation(struct State state, Test * tester, Engine * engine) {
@@ -32,7 +59,7 @@ bool generation(struct State state, Test * tester, Engine * engine) {
 
         // Other grandchildren slightly modified, reset by evolve()
         for (int grandchild = 1; grandchild < state.total_winners; grandchild++) {
-            engine->evolve(state.children[winner].code, state.children[grandchild * state.total_winners + winner].code, state.def_rand - state.repetitions, tester->allowed_chars());
+            engine->evolve(state.children[winner].code, state.children[grandchild * state.total_winners + winner].code, state.def_rand - state.repetitions);
             state.children[grandchild * state.total_winners + winner].score = 0;
         }
     }
@@ -120,19 +147,26 @@ void quit(int sig) {
 int runner(struct State state) {
     signal(SIGINT, quit);
     Test * tester = create_tictactoe();
+    Competition * competition = create_tic_off();
     Engine * engine = create_network();
-    // Set the default
-    for(int ancestor = 0; ancestor < state.total_winners; ancestor++)
-        state.children[ancestor].code = engine->ancestor_prog();
+    // Set the default, fill whole thing cause why not
+    state.children[0].code = engine->ancestor_prog();
+    state.children[0].score = 1;
+    for(int ancestor = 1; ancestor < state.total_winners * state.total_winners; ancestor++) {
+        engine->evolve(state.children[0].code, state.children[ancestor].code, state.def_rand);
+        state.children[ancestor].score = 1;
+    }
 
     while (running && state.runs < EXECUTIONS) {
-        if(generation(state, tester, engine))
-            state.repetitions++;
-        else
-            state.repetitions = 0;
+        // if(generation(state, tester, engine))
+        //     state.repetitions++;
+        // else
+        //     state.repetitions = 0;
+        brutality(state, competition, engine);
 
         state.runs++;
         std::cout << engine->debug(state.children[0].code) << std::endl;
+        tester->score(&state.children[0], engine);
         if (cli_interpret(state) == false)
             break;
     }
@@ -140,6 +174,6 @@ int runner(struct State state) {
     // if (running == false)
         // save(state);
 
-    delete state.children;
+    delete[] state.children;
     return 0;
 }

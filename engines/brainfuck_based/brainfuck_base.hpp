@@ -17,8 +17,9 @@ class Brainfuck_Base : public Engine {
             return initial;
         }
 
-        void evolve(const std::string& parent, std::string& child, size_t randomness, const char * chars) {
-            int len = strlen(chars);
+        void evolve(const std::string& parent, std::string& child, size_t randomness) {
+            const char * allowed_chars = "+-<>[].,";
+            int len = strlen(allowed_chars);
             child.clear();
 
             for (size_t gene = 0; gene < parent.size(); gene++) {
@@ -28,12 +29,12 @@ class Brainfuck_Base : public Engine {
                         break;
                     case 1: // 1 % chance you add code
                         gene--;
-                        child += chars[rand() % len];
+                        child += allowed_chars[rand() % len];
                         break;
                     case 2:
                     case 3: // 3% chance you modify
                     case 4:
-                        child += chars[rand() % len];
+                        child += allowed_chars[rand() % len];
                         break;
                     default: // 95 % chance you do nothing (slightly more because additions go here after)
                         child += parent[gene];

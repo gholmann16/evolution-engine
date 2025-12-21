@@ -1,6 +1,6 @@
 #include <stddef.h>
 #include <string.h>
-#include <evolver.hpp>
+#include "test.hpp"
 
 // Needed for little endian
 #define SWAP(x) ((x>>8) & 0xff) | ((x & 0xff)<<8)
@@ -76,10 +76,6 @@ class Crc8 : public Test {
 
         void display(struct Program * prog, Engine * engine) override {
             ;
-        }
-
-        const char * allowed_chars() override {
-            return "+-<>[].,";
         }
 };
 
