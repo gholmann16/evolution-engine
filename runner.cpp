@@ -11,6 +11,7 @@
 #include <state.hpp>
 #include <algorithm>
 #include <random>
+#include <fstream>
 
 bool compare_ratings(const Program& first, const Program &second) {
     return first.score < second.score;
@@ -157,6 +158,9 @@ int runner(struct State state) {
         state.children[ancestor].score = 1;
     }
 
+    std::ofstream file("data.txt");
+    file << "# X Y\n";
+
     while (running && state.runs < EXECUTIONS) {
         // if(generation(state, tester, engine))
         //     state.repetitions++;
@@ -167,9 +171,11 @@ int runner(struct State state) {
         state.runs++;
         std::cout << engine->debug(state.children[0].code) << std::endl;
         tester->score(&state.children[0], engine);
+        file << state.runs << " " << state.children[0].score << "\n";
         if (cli_interpret(state) == false)
             break;
     }
+    file.close();
 
     // if (running == false)
         // save(state);

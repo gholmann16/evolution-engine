@@ -9,3 +9,5 @@ gui
 *.bin
 crcbf.h
 *.out
+data.txt
+fit.log
