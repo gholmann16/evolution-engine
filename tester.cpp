@@ -1,5 +1,7 @@
 #include "evolver.hpp"
 #include "engines/neural_based/neuron.hpp"
+#include "tests/test.hpp"
+#include "competitions/competition.hpp"
 #include <iostream>
 #include <format>
 
@@ -27,9 +29,19 @@ int main() {
         .code = std::string(reinterpret_cast<const char*>(connections), sizeof(connections)),
         .score = 0,
     };
-    // tester->score(&prog, engine);
-    // printf("score comes out to %d\n", prog.score);
+    struct Program other = {
+        .code = std::string(),
+        .score = 0,
+    };
+    tester->score(&prog, engine);
+    printf("score comes out to %d\n", prog.score);
 
+    tester->score(&other, engine);
+    printf("score comes out to %d\n", other.score);
+
+    Competition * competition = create_tic_off();
+    bool win = competition->fight(prog.code, other.code, engine);
+    printf("%s\n", win ? "true" : "false");
     char game[256] = "         ";
     char output[256];
     printf("%c | %c | %c\n", game[0], game[1], game[2]);

@@ -53,23 +53,25 @@ class Network : public Engine {
                 switch(rand() % randomness) {
                     case 0: // 1 % chance you remove code
                         break;
-                    case 1: // 2 % chance you add code
+                    case 1: // 3 % chance you add code
                     case 2:
+                    case 3:
                         i--;
                         temp = random_synapse();
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
-                    case 3: // 5% chance you change the multiplier
-                    case 4:
+                    case 4: // 6% chance you change the multiplier
                     case 5:
                     case 6:
                     case 7:
-                        temp = connections[i];
-                        temp.multiplier += -0.05f + ((float)rand()) / RAND_MAX * (0.05f - -0.05f);
-                        child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
-                        break;
                     case 8:
                     case 9:
+                        temp = connections[i];
+                        temp.multiplier += -0.04f + ((float)rand()) / RAND_MAX * (0.04f - -0.04f);
+                        child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
+                        break;
+                    case 10:
+                    case 11:
                         temp = connections[i];
                         temp.multiplier += -0.25f + ((float)rand()) / RAND_MAX * (0.25f - -0.25f);
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
@@ -145,6 +147,17 @@ class Network : public Engine {
                 }
             }
 
+            // input 36-37 (first or second)
+            int num = 0;
+            for (int i = 0; i < 9; i++)
+                num += input[i] == ' ' ? 0 : 1;
+
+            key.id = 36 + num % 2; // if number is odd, you are X, 37
+            auto player_input = brain.find(key);
+            if (player_input != brain.end())
+                player_input->power = 1.0;
+
+
             for (int count = 0; count < 10; count++) {
                 cycle(brain);
             }
@@ -163,6 +176,7 @@ class Network : public Engine {
                     best = on;
                 }
             }
+            
             output[0] = best % 9;
             return 0;
         }
