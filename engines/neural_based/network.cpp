@@ -8,14 +8,23 @@
 
 class Network : public Engine {
     private:
+        void fire(const Neuron& nur) {
+            for (Output connect : nur.outs)
+                (*(connect.out)).power += connect.multiplier;
+            nur.power = 0.0;
+        }
         // named flood cause the numbers kind of flood through the brain
         void cycle(std::set<Neuron>& brain) {
             for (const Neuron& nur : brain) {
-                if (nur.power == 0.0 || nur.outs.size() == 0.0)
+                if (nur.power == 0.0)
                     continue;
-                for (Output connect : nur.outs)
-                    (*(connect.out)).power += connect.multiplier * nur.power;
-                nur.power = 0.0;
+                else if (nur.power >= 0.7 && nur.outs.size() != 0) {
+                    fire(nur);
+                }
+                else {
+                    // printf("%d lowered from %f to %f\n", nur.id, nur.power, nur.power * 0.9);
+                    nur.power *= 0.9;
+                }
             }
         }
 
@@ -30,15 +39,15 @@ class Network : public Engine {
     public:
         std::string ancestor_prog() override {
             Synapse connections[] = {
-                {0, 27, 1.0},
-                {3, 28, 1.0},
-                {6, 29, 1.0},
-                {9, 30, 1.0},
-                {12, 31, 1.0},
-                {15, 32, 1.0},
-                {18, 33, 1.0},
-                {21, 34, 1.0},
-                {24, 35, 1.0},
+                {0, 29, 1.0},
+                {3, 30, 1.0},
+                {6, 31, 1.0},
+                {9, 32, 1.0},
+                {12, 33, 1.0},
+                {15, 34, 1.0},
+                {18, 35, 1.0},
+                {21, 36, 1.0},
+                {24, 37, 1.0},
             };
             return std::string(reinterpret_cast<const char*>(connections), sizeof(connections));
         }
@@ -67,13 +76,13 @@ class Network : public Engine {
                     case 8:
                     case 9:
                         temp = connections[i];
-                        temp.multiplier += -0.04f + ((float)rand()) / RAND_MAX * (0.04f - -0.04f);
+                        temp.multiplier *= 0.975f + ((float)rand()) / RAND_MAX * (1.025f - 0.975f);
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
                     case 10:
                     case 11:
                         temp = connections[i];
-                        temp.multiplier += -0.25f + ((float)rand()) / RAND_MAX * (0.25f - -0.25f);
+                        temp.multiplier *= -0.9f + ((float)rand()) / RAND_MAX * (1.1f - 0.9f);
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
                     default: // 95 % chance you do nothing (slightly more because additions go here after)
@@ -125,51 +134,48 @@ class Network : public Engine {
                 });
             }
 
-            // input 0-26
-            for (int i = 0; i < 9; i++) {
-                int multiplier = 0;
-                switch(input[i]) {
-                    default:
-                        puts("Something has gone wrong");
-                        exit(-1);
-                    case 'X':
-                        multiplier++;
-                    case 'O':
-                        multiplier++;
-                    case ' ':
-                        break;
-                }
-                key.id = i*3 + multiplier;
-                auto input_neuron = brain.find(key);
-                if (input_neuron != brain.end()) {
-                    // printf("here setting %d to 1.0\n", key.id);
-                    input_neuron->power = 1.0;
-                }
-            }
-
-            // input 36-37 (first or second)
-            int num = 0;
-            for (int i = 0; i < 9; i++)
-                num += input[i] == ' ' ? 0 : 1;
-
-            key.id = 36 + num % 2; // if number is odd, you are X, 37
-            auto player_input = brain.find(key);
-            if (player_input != brain.end())
-                player_input->power = 1.0;
-
-
+            // cycle loop, exit when found
             for (int count = 0; count < 10; count++) {
+                for (int i = 0; i < 9; i++) {
+                    int multiplier = 0;
+                    switch(input[i]) {
+                        default:
+                            puts("Something has gone wrong");
+                            exit(-1);
+                        case 'X':
+                            multiplier++;
+                        case 'O':
+                            multiplier++;
+                        case ' ':
+                            break;
+                    }
+                    key.id = i*3 + multiplier;
+                    auto input_neuron = brain.find(key);
+                    if (input_neuron != brain.end()) {
+                        // printf("debug power %d\n", nur.power);
+                        fire(*input_neuron);
+                    }
+                }
+                // input 27-28 (first or second)
+                int num = 0;
+                for (int i = 0; i < 9; i++)
+                    num += input[i] == ' ' ? 0 : 1;
+                key.id = 27 + num % 2; // if number is odd, you are X, 37
+                auto player_input = brain.find(key);
+                if (player_input != brain.end())
+                    fire(*player_input);
+    
                 cycle(brain);
             }
 
             // output 27-35
             float max_power = 0.0;
             unsigned char best = 0;
-            for (unsigned char on = 27; on < 36; on++) {
+            for (unsigned char on = 29; on < 38; on++) {
                 key.id = on;
                 auto output_neuron = brain.find(key);
                 // if (output_neuron != brain.end()) {
-                //     std::cout << (int)on << ": " << output_neuron->power << std::endl;
+                //     printf("%d: %f\n", output_neuron->id, output_neuron->power);
                 // }
                 if (output_neuron != brain.end() && output_neuron->power > max_power) {
                     max_power = output_neuron->power;
@@ -177,7 +183,7 @@ class Network : public Engine {
                 }
             }
             
-            output[0] = best % 9;
+            output[0] = best - 29;
             return 0;
         }
 
