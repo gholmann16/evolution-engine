@@ -1,53 +1,46 @@
-#include "neuron.hpp"
+#include "synapse.hpp"
 #include <evolver.hpp>
 #include <set>
 #include <string>
 #include <cmath>
 #include <format>
-#define STARTING 20
+
+#define THRESHOLD 0.7f
+#define LEAK 0.9f;
+#define DRAIN 0.8f
 
 class Network : public Engine {
     private:
-        void fire(const Neuron& nur) {
-            for (Output connect : nur.outs)
-                (*(connect.out)).power += connect.multiplier;
-            nur.power = 0.0;
-        }
-        // named flood cause the numbers kind of flood through the brain
-        void cycle(std::set<Neuron>& brain) {
-            for (const Neuron& nur : brain) {
-                if (nur.power == 0.0)
-                    continue;
-                else if (nur.power >= 0.7 && nur.outs.size() != 0) {
-                    fire(nur);
-                }
-                else {
-                    // printf("%d lowered from %f to %f\n", nur.id, nur.power, nur.power * 0.9);
-                    nur.power *= 0.9;
-                }
-            }
-        }
-
-        struct Synapse random_synapse() {
+        struct Synapse random_synapse(float limit) {
             return Synapse {
-                .input = static_cast<unsigned char>(rand() % 256),
-                .output = static_cast<unsigned char>(rand() % 256),
-                .multiplier = -4.0f + ((float)rand()) / RAND_MAX * (4.0f - -4.0f),
+                .input = static_cast<unsigned short>(rand() % 247),
+                .output = static_cast<unsigned short>(rand() % 229 + 27),
+                .multiplier = -limit + ((float)rand()) / RAND_MAX * (limit - -limit),
             };
         }
 
     public:
         std::string ancestor_prog() override {
+            // must be in input order
             Synapse connections[] = {
-                {0, 29, 1.0},
-                {3, 30, 1.0},
-                {6, 31, 1.0},
-                {9, 32, 1.0},
-                {12, 33, 1.0},
-                {15, 34, 1.0},
-                {18, 35, 1.0},
-                {21, 36, 1.0},
-                {24, 37, 1.0},
+                {0, 100, 1.0},
+                {3, 103, 1.0},
+                {6, 106, 1.0},
+                {9, 109, 1.0},
+                {12, 112, 1.0},
+                {15, 115, 1.0},
+                {18, 118, 1.0},
+                {21, 121, 1.0},
+                {24, 124, 1.0},
+                {100, 247, 1.0},
+                {103, 248, 1.0},
+                {106, 249, 1.0},
+                {109, 250, 1.0},
+                {112, 251, 1.0},
+                {115, 252, 1.0},
+                {118, 253, 1.0},
+                {121, 254, 1.0},
+                {124, 255, 1.0},
             };
             return std::string(reinterpret_cast<const char*>(connections), sizeof(connections));
         }
@@ -60,29 +53,20 @@ class Network : public Engine {
 
             for (size_t i = 0; i < amount; i++) {
                 switch(rand() % randomness) {
-                    case 0: // 1 % chance you remove code
+                    case 0: // 1% chance you delete
                         break;
-                    case 1: // 3 % chance you add code
+                    case 1: // 6% chance you change the multiplier
                     case 2:
                     case 3:
-                        i--;
-                        temp = random_synapse();
-                        child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
-                        break;
-                    case 4: // 6% chance you change the multiplier
+                    case 4:
                     case 5:
-                    case 6:
-                    case 7:
-                    case 8:
-                    case 9:
                         temp = connections[i];
                         temp.multiplier *= 0.975f + ((float)rand()) / RAND_MAX * (1.025f - 0.975f);
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
-                    case 10:
-                    case 11:
+                    case 6:
                         temp = connections[i];
-                        temp.multiplier *= -0.9f + ((float)rand()) / RAND_MAX * (1.1f - 0.9f);
+                        temp.multiplier *= 0.875f + ((float)rand()) / RAND_MAX * (1.125f - 0.875f);
                         child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
                         break;
                     default: // 95 % chance you do nothing (slightly more because additions go here after)
@@ -90,6 +74,26 @@ class Network : public Engine {
                         break;
                 }
             }
+
+            float diff = randomness / 1000.0f;
+            int additions = rand() % ((int)std::pow(amount, 0.9 - diff) + 1);
+            size_t old_len = child.size();
+            for (int j = 0; j < additions; j++) {
+                temp = random_synapse((j % 4) + 1);
+                child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
+            }
+            Synapse * begin = reinterpret_cast<Synapse*>(&child[0]);
+            Synapse * pivot = reinterpret_cast<Synapse*>(&child[old_len]);
+            Synapse * end = reinterpret_cast<Synapse*>(&child[child.size()]);
+
+            // sort n merge in place
+            std::sort(pivot, end, [](const Synapse& a, const Synapse& b) {
+                return a.input < b.input;
+            });
+
+            std::inplace_merge(begin, pivot, end, [](const Synapse& a, const Synapse& b) {
+                return a.input < b.input;
+            });
         }
 
         // uses graphviz to output https://dreampuf.github.io/GraphvizOnline/
@@ -111,79 +115,58 @@ class Network : public Engine {
         size_t run(const std::string& code, char input[256], char output[256], size_t max) override {
             const struct Synapse * connections = reinterpret_cast<const struct Synapse *>(code.data());
             size_t amount = code.size() / sizeof(struct Synapse);
-            std::set<Neuron> brain = std::set<Neuron>();
-
-            // wire/populate brain
-            Neuron key = {0};
-            for (size_t n = 0; n < amount; n++) {
-                auto [input_neuron, input_ignored] = brain.emplace(Neuron {
-                    .id = connections[n].input,
-                    .power = 0.0,
-                    .outs = std::vector<Output>(),
-                });
-
-                auto [output_neuron, output_ignored] = brain.emplace(Neuron {
-                    .id = connections[n].output,
-                    .power = 0.0,
-                    .outs = std::vector<Output>(),
-                });
-
-                input_neuron->outs.push_back(Output {
-                    .out = &(*output_neuron),
-                    .multiplier = connections[n].multiplier,
-                });
-            }
+            float neuron[256] = {0};
+            unsigned short current_id = -1;
+            char options[3] = {' ', 'O', 'X'};
 
             // cycle loop, exit when found
             for (int count = 0; count < 10; count++) {
-                for (int i = 0; i < 9; i++) {
-                    int multiplier = 0;
-                    switch(input[i]) {
-                        default:
-                            puts("Something has gone wrong");
-                            exit(-1);
-                        case 'X':
-                            multiplier++;
-                        case 'O':
-                            multiplier++;
-                        case ' ':
-                            break;
-                    }
-                    key.id = i*3 + multiplier;
-                    auto input_neuron = brain.find(key);
-                    if (input_neuron != brain.end()) {
-                        // printf("debug power %d\n", nur.power);
-                        fire(*input_neuron);
+                size_t current_synapse = 0;
+                for (current_id = 0; current_id < 27; current_id++) {
+                    bool fire = input[current_id / 3] == options[current_id % 3];
+                    while(connections[current_synapse].input == current_id && current_synapse < amount) {
+                        // if has to be within, because it has to cycle through regardless
+                        if (fire)
+                            neuron[connections[current_synapse].output] += connections[current_synapse].multiplier;
+
+                        // printf("checking if %d at %d is equal to %d condition %s\n", input[current_id / 3], current_id, options[current_id % 3], input[current_id] == options[current_id % 3] ? "true" : "false");
+                        // printf("running %d -> %d now @ %f\n", current_id, connections[current_synapse].output, neuron[connections[current_synapse].output]);
+                        current_synapse++;
                     }
                 }
-                // input 27-28 (first or second)
-                int num = 0;
-                for (int i = 0; i < 9; i++)
-                    num += input[i] == ' ' ? 0 : 1;
-                key.id = 27 + num % 2; // if number is odd, you are X, 37
-                auto player_input = brain.find(key);
-                if (player_input != brain.end())
-                    fire(*player_input);
     
-                cycle(brain);
+                for (current_id = 27; current_id < 247; current_id++) {
+                    bool fire = neuron[current_id] >= THRESHOLD;
+                    while(connections[current_synapse].input == current_id && current_synapse < amount) {
+                        // if has to be within, because it has to cycle through regardless
+                        if (fire)
+                            neuron[connections[current_synapse].output] += connections[current_synapse].multiplier;
+                        current_synapse++;
+                    }
+                    if (fire)
+                        neuron[current_id] = 0;
+                    else
+                        neuron[current_id] *= LEAK; 
+                }
+
+                // deplete battery / output
+                for (current_id = 247; current_id < 256; current_id++) {
+                    neuron[current_id] *= DRAIN;
+                }
             }
 
-            // output 27-35
+            // output 247-255
             float max_power = 0.0;
-            unsigned char best = 0;
-            for (unsigned char on = 29; on < 38; on++) {
-                key.id = on;
-                auto output_neuron = brain.find(key);
-                // if (output_neuron != brain.end()) {
-                //     printf("%d: %f\n", output_neuron->id, output_neuron->power);
-                // }
-                if (output_neuron != brain.end() && output_neuron->power > max_power) {
-                    max_power = output_neuron->power;
+            unsigned short best = 0;
+            for (unsigned short on = 247; on < 256; on++) {
+                // printf("%d: %f\n", on, neuron[on]);
+                if (neuron[on] > max_power) {
+                    max_power = neuron[on];
                     best = on;
                 }
             }
-            
-            output[0] = best - 29;
+
+            output[0] = best - 247;
             return 0;
         }
 
@@ -196,13 +179,10 @@ class Network : public Engine {
             if (first_amount != second_amount)
                 return false;
 
-            for (size_t i = 0; i < first_amount; i++) {
+            // backwards is probably faster cause most random additions will be at the end
+            for (size_t i = first_amount; i-- > 0;) {
                 if (first_connections[i].input != second_connections[i].input || first_connections[i].output != second_connections[i].output)
                     return false;
-                float difference = first_connections[i].multiplier - second_connections[i].multiplier;
-                if (difference > 0.05f && difference < -0.05f) {
-                    return false;
-                }
             }
             return true;
         }
