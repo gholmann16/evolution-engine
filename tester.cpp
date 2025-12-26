@@ -1,7 +1,5 @@
-#include "evolver.hpp"
 #include "engines/neural_based/brain.hpp"
 #include "tests/test.hpp"
-#include "competitions/competition.hpp"
 #include <iostream>
 #include <format>
 
@@ -42,7 +40,7 @@ int main() {
     };
 
 
-    tester->score(&prog, engine);
+    tester->score(&prog, engine, NULL);
     // srand(time(NULL));
     printf("score comes out to %d\n", prog.score);
     std::cout << engine->debug(prog.code);

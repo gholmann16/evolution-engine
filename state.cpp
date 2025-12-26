@@ -1,5 +1,4 @@
-#include <state.hpp>
-#include <evolver.hpp>
+#include "state.hpp"
 #include <time.h>
 #define NUM_WIN 100
 #define DEFAULT_RANDOMNESS 250

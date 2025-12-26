@@ -1,3 +1,11 @@
+#pragma once
+#define VERBOSE true
+
+struct Program {
+    void * code;
+    unsigned long long score;
+};
+
 struct State {
     long int seed;
     int runs;

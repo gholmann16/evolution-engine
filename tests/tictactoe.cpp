@@ -93,11 +93,7 @@ class TicTacToe : public Test {
             return total_recursive_score;
         }
     public:
-        void prepare_answer() override {
-            ;
-        }
-
-        void score(struct Program * prog, Engine * engine) override {
+        void score(struct Program * prog, Engine * engine, const State * state) override {
             alignas(256) char output[256] = {0};
             alignas(256) char board[256] = "         ";
             alignas(256) char board2[256] = "         ";
@@ -112,12 +108,6 @@ class TicTacToe : public Test {
 
             if (lost)
                 prog->score = lost * 50 + engine->size(prog->code);
-            else
-                prog->score = 0;
-        }
-
-        void display(struct Program * prog, Engine * engine) override {
-            ;
         }
 };
 

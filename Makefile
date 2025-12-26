@@ -1,4 +1,4 @@
-CFLAGS := -Wall -c -O3 -g -I. -Wno-deprecated-declarations -std=c++20 -march=native
+CFLAGS := -Wall -c -O3 -g -Wno-deprecated-declarations -std=c++20 -march=native
 LDLIBS := -flto
 
 monolith.out: cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o tic_off.o network.o
@@ -17,8 +17,8 @@ compiler: standalone.o compiler.o vector.o
 
 # Objects
 
-tic_off.o: competitions/tic_off.cpp
-	g++ $(CFLAGS) competitions/tic_off.cpp
+tic_off.o: tests/tic_off.cpp
+	g++ $(CFLAGS) tests/tic_off.cpp
 
 network.o: engines/neural_based/network.cpp
 	g++ $(CFLAGS) engines/neural_based/network.cpp
@@ -27,7 +27,7 @@ cli.o: cli.cpp
 	g++ $(CFLAGS) cli.cpp
 
 tictactoe.o: tests/tictactoe.cpp
-	gcc $(CFLAGS) tests/tictactoe.cpp
+	g++ $(CFLAGS) tests/tictactoe.cpp
 
 assembler.o: engines/brainfuck_based/assembler.cpp
 	g++ $(CFLAGS) engines/brainfuck_based/assembler.cpp

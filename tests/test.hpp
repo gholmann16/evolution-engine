@@ -1,22 +1,13 @@
-#include <evolver.hpp>
+#include "../engines/engine.hpp"
+#include "../state.hpp"
 
 class Test {
     public:
-        virtual void score(struct Program * prog, Engine * engine) = 0;
-        virtual void prepare_answer() = 0;
-        virtual void display(struct Program * prog, Engine * engine) = 0;
-
-    protected:
-        char ** inputs = (char **)calloc(10, sizeof(char *)); // up to 10 tests
-        char ** expect = (char **)calloc(10, sizeof(char *)); // up to 10 tests
-
-        ~Test() {
-            free(inputs);
-            free(expect);
-        }
+        virtual void score(struct Program * prog, Engine * engine, const State * state) = 0;
 };
 
 // All the tests:
 Test * create_crc8();
 Test * create_output();
 Test * create_tictactoe();
+Test * create_tic_off();

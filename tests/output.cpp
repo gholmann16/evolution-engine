@@ -5,10 +5,7 @@
 
 class Output : public Test {
     public:
-        void prepare_answer() override {
-            ;
-        }
-        void score(struct Program * prog, Engine * engine) override {
+        void score(struct Program * prog, Engine * engine, const State * state) override {
             alignas(256) char empty_input[256] = {0};
             alignas(256) char output[256] = {0};
             if (engine->run(prog->code, empty_input, output, MAX_RUNTIME) == MAX_RUNTIME) {
@@ -29,13 +26,6 @@ class Output : public Test {
             if (prog->score) {
                 prog->score = prog->score * 50 + engine->size(prog->code);
             }
-        }
-
-        void display(struct Program * prog, Engine * engine) override {
-            char empty_input[256] = {0};
-            char output[256] = {0};
-            engine->run(prog->code, empty_input, output, MAX_RUNTIME);
-            puts(output);
         }
 };
 

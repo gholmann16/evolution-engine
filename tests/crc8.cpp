@@ -38,8 +38,10 @@ class Crc8 : public Test {
             input[255] = 0;
         }
 
-    public:
-        void prepare_answer() override {
+        char ** inputs = (char **)calloc(NUM_TRIES, sizeof(char *));
+        char ** expect = (char **)calloc(NUM_TRIES, sizeof(char *));
+
+        void prepare_answer() {
             char tmp[256];
             for (int i = 0; i < NUM_TRIES; i++) {
                 free(inputs[i]);
@@ -54,7 +56,13 @@ class Crc8 : public Test {
             }
         }
 
-        void score(struct Program * prog, Engine * engine) {
+        int current_generation = -1;
+    public:
+        void score(struct Program * prog, Engine * engine, const State * state) {
+            if (current_generation != state->runs) {
+                current_generation = state->runs;
+                prepare_answer();
+            }
             int times = 0;
             size_t runtime = 0;
             while (times < NUM_TRIES) {
@@ -74,8 +82,9 @@ class Crc8 : public Test {
             prog->score = runtime + engine->size(prog->code) * 5;
         }
 
-        void display(struct Program * prog, Engine * engine) override {
-            ;
+        ~Crc8() {
+            free(inputs);
+            free(expect);
         }
 };
 

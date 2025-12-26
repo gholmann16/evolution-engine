@@ -3,13 +3,6 @@
 #include <stdlib.h>
 #include <string>
 
-#define VERBOSE true
-
-struct Program {
-    void * code;
-    size_t score;
-};
-
 class Engine {
     public:
         // input read only, output should be non freeable memory, too many allocs otherwise. Return looptime/runtime

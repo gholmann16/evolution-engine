@@ -3,12 +3,11 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <time.h>
-#include <evolver.hpp>
-#include <tests/test.hpp>
-#include <competitions/competition.hpp>
+#include "engines/engine.hpp"
+#include "tests/test.hpp"
 #include <iostream>
-#include <crcbf.h>
-#include <state.hpp>
+#include "crcbf.h"
+#include "state.hpp"
 #include <algorithm>
 #include <random>
 #include <fstream>
@@ -23,31 +22,6 @@ struct Program last = {
 };
 
 // Returns true if repeat
-void brutality(struct State state, Competition * competition, Engine * engine) {
-    size_t square = state.total_winners * state.total_winners;
-    double before = clock();
-    std::mt19937 g(state.repetitions + state.runs);
-    // Use std::begin and std::end for C-style arrays
-    std::shuffle(state.children, state.children + square, g);
-
-    double after = clock();
-    if (VERBOSE)
-        printf("Time randomizing: %lf\n", (after - before) / CLOCKS_PER_SEC);
-
-    before = clock();
-    for (size_t winner = 0; winner < square / 2; winner++) {
-        if (competition->fight(state.children[winner].code, state.children[square - winner - 1].code, engine))
-            engine->evolve(state.children[square - winner - 1].code, state.children[winner].code, state.def_rand);
-        else
-            engine->evolve(state.children[winner].code, state.children[square - winner - 1].code, state.def_rand);
-    }
-
-    after = clock();
-    if (VERBOSE)
-        printf("Time competing and evolving: %lf\n", (after - before) / CLOCKS_PER_SEC);
-}
-
-// Returns true if repeat
 bool generation(struct State state, Test * tester, Engine * engine) {
     // Determinism
     double before = clock();
@@ -56,7 +30,7 @@ bool generation(struct State state, Test * tester, Engine * engine) {
     // Evolve from winning pool
     for (int winner = 0; winner < state.total_winners; winner++) {
         // Keep the winner around so you never regress (agamogenesis) and reset
-        state.children[winner].score = 0;
+        // state.children[winner].score = 0;
 
         // Other grandchildren slightly modified, reset by evolve()
         for (int grandchild = 1; grandchild < state.total_winners; grandchild++) {
@@ -69,9 +43,9 @@ bool generation(struct State state, Test * tester, Engine * engine) {
         printf("Time generating: %lf\n", (after - before) / CLOCKS_PER_SEC);
 
     before = clock();
-    tester->prepare_answer();
-    for (int i = 0; i < state.total_winners * state.total_winners; i++) {
-        tester->score(&(state.children[i]), engine);
+    // no reason to re-test the winners since we're not changing them
+    for (int i = state.total_winners; i < state.total_winners * state.total_winners; i++) {
+        tester->score(&(state.children[i]), engine, &state);
     }
     after = clock();
 
@@ -124,7 +98,7 @@ bool cli_interpret(struct State state, Engine * engine) {
     double time_taken = (clock() - last) / CLOCKS_PER_SEC;
     last = clock();
     average = (average * (state.runs - 1) + time_taken) / state.runs;
-    printf("Winner of generation %d won with a score of %ld, size %ld, (%d previously wins) (seed is %ld). Time used %lf (average is %lf).\n", 
+    printf("Winner of generation %d won with a score of %llu, size %ld, (%d previously wins) (seed is %ld). Time used %lf (average is %lf).\n", 
         state.runs, state.children[0].score, engine->size(state.children[0].code), state.repetitions, state.seed,
         time_taken, average
     );
@@ -149,14 +123,13 @@ void quit(int sig) {
 
 int runner(struct State state) {
     signal(SIGINT, quit);
-    Test * tester = create_tictactoe();
-    Competition * competition = create_tic_off();
+    Test * tester = create_tic_off();
     Engine * engine = create_network();
     // Set the default, fill whole thing cause why not
     last.code = engine->ancestor_prog();
     for(int ancestor = 0; ancestor < state.total_winners * state.total_winners; ancestor++) {
         state.children[ancestor].code = engine->ancestor_prog();
-        state.children[ancestor].score = 0;
+        state.children[ancestor].score = -1;
     }
 
     std::ofstream file("data.txt");

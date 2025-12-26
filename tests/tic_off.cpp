@@ -1,8 +1,8 @@
-#include "competition.hpp"
+#include "test.hpp"
 #define MAX_RUNTIME 1000000
 
 // 1 v 1 tic tac toe
-class Tic_Off : public Competition {
+class Tic_Off : public Test {
     private:
         bool won(char board[256], char player) {
             if (
@@ -34,7 +34,6 @@ class Tic_Off : public Competition {
             return true;
         }
 
-    public:
         // false = 0 = first wins
         // true = 1 = second wins
         bool fight(const void * first, const void * second, Engine * engine) {
@@ -55,8 +54,20 @@ class Tic_Off : public Competition {
             // if no one won, give it to second, because they didn't have the advantage
             return first > second ? true : false; // if first is larger, second wins
         }
+
+    public:
+        void score(struct Program * prog, Engine * engine, const State * state) {
+            // 100 winners of last generation, who don't play cause they already have a score
+            size_t total = 0;
+            for (int i = 0; i < state->total_winners; i++) {
+                total += fight(prog->code, state->children[i].code, engine); // if second win +1 (higher score worse)
+                total += !fight(state->children[i].code, prog->code, engine); // if second win + (!1) = +0 (lower score better)
+            }
+            if (total)
+                prog->score = 50 * total;
+        }
 };
 
-Competition * create_tic_off() {
+Test * create_tic_off() {
     return new Tic_Off();
 }
