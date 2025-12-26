@@ -18,7 +18,7 @@ bool compare_ratings(const Program& first, const Program &second) {
 }
 
 struct Program last = {
-    .code = std::string(),
+    .code = NULL,
     .score = 0,
 };
 
@@ -116,14 +116,16 @@ bool generation(struct State state, Test * tester, Engine * engine) {
 #define EXECUTIONS 10000000
 
 // Returns false = end program
-bool cli_interpret(struct State state) {
+bool cli_interpret(struct State state, Engine * engine) {
+    std::cout << engine->debug(state.children[0].code) << std::endl;
+
     static double last = 0;
     static double average = 0;
     double time_taken = (clock() - last) / CLOCKS_PER_SEC;
     last = clock();
     average = (average * (state.runs - 1) + time_taken) / state.runs;
     printf("Winner of generation %d won with a score of %ld, size %ld, (%d previously wins) (seed is %ld). Time used %lf (average is %lf).\n", 
-        state.runs, state.children[0].score, state.children[0].code.size(), state.repetitions, state.seed,
+        state.runs, state.children[0].score, engine->size(state.children[0].code), state.repetitions, state.seed,
         time_taken, average
     );
 
@@ -151,28 +153,26 @@ int runner(struct State state) {
     Competition * competition = create_tic_off();
     Engine * engine = create_network();
     // Set the default, fill whole thing cause why not
-    state.children[0].code = engine->ancestor_prog();
-    state.children[0].score = 1;
-    for(int ancestor = 1; ancestor < state.total_winners * state.total_winners; ancestor++) {
-        engine->evolve(state.children[0].code, state.children[ancestor].code, state.def_rand);
-        state.children[ancestor].score = 1;
+    last.code = engine->ancestor_prog();
+    for(int ancestor = 0; ancestor < state.total_winners * state.total_winners; ancestor++) {
+        state.children[ancestor].code = engine->ancestor_prog();
+        state.children[ancestor].score = 0;
     }
 
     std::ofstream file("data.txt");
     file << "# X Y\n";
 
     while (running && state.runs < EXECUTIONS) {
-        // if(generation(state, tester, engine))
-        //     state.repetitions++;
-        // else
-        //     state.repetitions = 0;
-        brutality(state, competition, engine);
+        if(generation(state, tester, engine))
+            state.repetitions++;
+        else
+            state.repetitions = 0;
+        // brutality(state, competition, engine);
 
         state.runs++;
-        std::cout << engine->debug(state.children[0].code) << std::endl;
-        tester->score(&state.children[0], engine);
+        // tester->score(&state.children[0], engine);
         file << state.runs << " " << state.children[0].score << "\n";
-        if (cli_interpret(state) == false)
+        if (cli_interpret(state, engine) == false)
             break;
     }
     file.close();

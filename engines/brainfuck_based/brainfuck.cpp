@@ -7,7 +7,7 @@
 
 class Brainfuck : public Brainfuck_Base {
     private:
-        bool validate(std::string code) {
+        bool validate(const std::string& code) {
             int open = 0;
             for (size_t x = 0; x < code.size(); x++) {
                 switch (code[x]) {
@@ -31,8 +31,9 @@ class Brainfuck : public Brainfuck_Base {
             ;
         }
 
-        size_t run(const std::string& code, char input[256], char output[256], size_t max) {
-            if(validate(code) == true)
+        size_t run(const void * code, char input[256], char output[256], size_t max) {
+            const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
+            if(validate(code_ref) == true)
                 return max; // Punishment for failing
 
             unsigned char memory[65536] = {0};
@@ -45,8 +46,8 @@ class Brainfuck : public Brainfuck_Base {
             size_t runtime = 0;
             int brackets;
 
-            for (size_t x = 0; x < code.size(); x++) {
-                switch(code[x]) {
+            for (size_t x = 0; x < code_ref.size(); x++) {
+                switch(code_ref[x]) {
                     case '+': 
                         memory[location]++;
                         break;
@@ -64,9 +65,9 @@ class Brainfuck : public Brainfuck_Base {
                         brackets = 1;
                         while (brackets) {
                             x++;
-                            if (code[x] == '[')
+                            if (code_ref[x] == '[')
                                 brackets++;
-                            else if (code[x] == ']')
+                            else if (code_ref[x] == ']')
                                 brackets--;
                         }
                         // Could do x-- and break, or just continue
@@ -89,9 +90,9 @@ class Brainfuck : public Brainfuck_Base {
                         break;
                     default:
                         puts("Unknown brainfuck command detected");
-                        printf("chracter hex: 0x%x\n", code[x]);
+                        printf("chracter hex: 0x%x\n", code_ref[x]);
                         puts("Code:");
-                        std::cout << code << std::endl;
+                        std::cout << code_ref << std::endl;
                         exit(-1);
                 }
             }

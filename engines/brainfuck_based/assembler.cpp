@@ -67,7 +67,8 @@ class JitFuck : public Brainfuck_Base {
             munmap(program, 4096 * 256);
         }
 
-        size_t run(const std::string& code, char input[256], char output[256], size_t max) {
+        size_t run(const void * code, char input[256], char output[256], size_t max) {
+            const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
             // clock_t begin = clock();
             int index = 0;
             int brackets = 0;
@@ -84,8 +85,8 @@ class JitFuck : public Brainfuck_Base {
             tried doing a 256 long array and directly accessing it and it wasn't any faster
             */
             int vec[65536];
-            for (unsigned short x = 0; x < code.size(); x++) {
-                switch(code[x]) {
+            for (unsigned short x = 0; x < code_ref.size(); x++) {
+                switch(code_ref[x]) {
                     case '>':
                         append(program, &index, rig, sizeof(rig));
                         break;

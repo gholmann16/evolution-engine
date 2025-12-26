@@ -111,7 +111,7 @@ class TicTacToe : public Test {
             }
 
             if (lost)
-                prog->score = lost * 50 + prog->code.size();
+                prog->score = lost * 50 + engine->size(prog->code);
             else
                 prog->score = 0;
         }

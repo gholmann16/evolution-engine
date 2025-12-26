@@ -71,7 +71,7 @@ class Crc8 : public Test {
                 times++;
             }
 
-            prog->score = runtime + prog->code.size() * 5;
+            prog->score = runtime + engine->size(prog->code) * 5;
         }
 
         void display(struct Program * prog, Engine * engine) override {

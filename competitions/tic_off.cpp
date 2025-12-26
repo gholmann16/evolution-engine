@@ -37,7 +37,7 @@ class Tic_Off : public Competition {
     public:
         // false = 0 = first wins
         // true = 1 = second wins
-        bool fight(const std::string& first, const std::string& second, Engine * engine) {
+        bool fight(const void * first, const void * second, Engine * engine) {
             alignas(256) char board[256] = "         ";
             alignas(256) char output[256];
             if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0], 'X'))

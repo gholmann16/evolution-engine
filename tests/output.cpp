@@ -27,7 +27,7 @@ class Output : public Test {
             }
 
             if (prog->score) {
-                prog->score = prog->score * 50 + prog->code.size();
+                prog->score = prog->score * 50 + engine->size(prog->code);
             }
         }
 

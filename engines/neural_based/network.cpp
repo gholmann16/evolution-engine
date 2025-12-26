@@ -1,4 +1,4 @@
-#include "synapse.hpp"
+#include "brain.hpp"
 #include <evolver.hpp>
 #include <set>
 #include <string>
@@ -6,7 +6,7 @@
 #include <format>
 
 #define THRESHOLD 0.7f
-#define LEAK 0.9f;
+#define LEAK 0.9f
 #define DRAIN 0.8f
 
 class Network : public Engine {
@@ -20,8 +20,9 @@ class Network : public Engine {
         }
 
     public:
-        std::string ancestor_prog() override {
-            // must be in input order
+        void * ancestor_prog() override {
+            struct Brain * brain = new Brain();
+
             Synapse connections[] = {
                 {0, 100, 1.0},
                 {3, 103, 1.0},
@@ -42,16 +43,24 @@ class Network : public Engine {
                 {121, 254, 1.0},
                 {124, 255, 1.0},
             };
-            return std::string(reinterpret_cast<const char*>(connections), sizeof(connections));
+
+            for (Synapse napse : connections) {
+                brain->add_synapse(napse);
+            }
+            return brain;
         }
 
-        void evolve(const std::string& parent, std::string &child, size_t randomness) override {
-            const struct Synapse * connections = reinterpret_cast<const struct Synapse *>(parent.data());
-            size_t amount = parent.size() / sizeof(struct Synapse);
-            child.clear();
-            struct Synapse temp;
+        void evolve(const void * parent, void * child, size_t randomness) override {
+            const struct Brain * parent_brain = reinterpret_cast<const struct Brain *>(parent);
+            struct Brain * child_brain = reinterpret_cast<struct Brain *>(child);
+            size_t amount = parent_brain->size;
+            child_brain->clear();
 
-            for (size_t i = 0; i < amount; i++) {
+            /*
+             * probably would be faster to full copy and then modify from there, but then i might have to start doing memmoves
+             * i could just pop only the last synapse per neuron but that would hurt the evolution and honestly generation takes no time
+             */
+            for (Synapse napse : *parent_brain) {
                 switch(rand() % randomness) {
                     case 0: // 1% chance you delete
                         break;
@@ -60,98 +69,77 @@ class Network : public Engine {
                     case 3:
                     case 4:
                     case 5:
-                        temp = connections[i];
-                        temp.multiplier *= 0.975f + ((float)rand()) / RAND_MAX * (1.025f - 0.975f);
-                        child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
+                        napse.multiplier *= 0.975f + ((float)rand()) / RAND_MAX * (1.025f - 0.975f);
+                        child_brain->add_synapse(napse);
                         break;
                     case 6:
-                        temp = connections[i];
-                        temp.multiplier *= 0.875f + ((float)rand()) / RAND_MAX * (1.125f - 0.875f);
-                        child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
+                        napse.multiplier *= 0.875f + ((float)rand()) / RAND_MAX * (1.125f - 0.875f);
+                        child_brain->add_synapse(napse);
                         break;
                     default: // 95 % chance you do nothing (slightly more because additions go here after)
-                        child.append(reinterpret_cast<const char*>(&connections[i]), sizeof(Synapse));
+                        child_brain->add_synapse(napse);
                         break;
                 }
             }
 
             float diff = randomness / 1000.0f;
             int additions = rand() % ((int)std::pow(amount, 0.9 - diff) + 1);
-            size_t old_len = child.size();
             for (int j = 0; j < additions; j++) {
-                temp = random_synapse((j % 4) + 1);
-                child.append(reinterpret_cast<const char*>(&temp), sizeof(Synapse));
+                float limit = j % 4 + 1;
+                child_brain->add_synapse({
+                    .input = static_cast<unsigned short>(rand() % 247),
+                    .output = static_cast<unsigned short>(rand() % 229 + 27),
+                    .multiplier = -limit + ((float)rand()) / RAND_MAX * (limit - -limit),
+                });
             }
-            Synapse * begin = reinterpret_cast<Synapse*>(&child[0]);
-            Synapse * pivot = reinterpret_cast<Synapse*>(&child[old_len]);
-            Synapse * end = reinterpret_cast<Synapse*>(&child[child.size()]);
-
-            // sort n merge in place
-            std::sort(pivot, end, [](const Synapse& a, const Synapse& b) {
-                return a.input < b.input;
-            });
-
-            std::inplace_merge(begin, pivot, end, [](const Synapse& a, const Synapse& b) {
-                return a.input < b.input;
-            });
         }
 
         // uses graphviz to output https://dreampuf.github.io/GraphvizOnline/
-        std::string debug(const std::string& code) override {
-            const struct Synapse * connections = reinterpret_cast<const struct Synapse *>(code.data());
-            size_t amount = code.size() / sizeof(struct Synapse);
+        std::string debug(const void * code) override {
+            const struct Brain * brain = reinterpret_cast<const struct Brain *>(code);
             std::string graphviz;
-            for (size_t i = 0; i < amount; i++) {
+            for (Synapse napse : *brain) {
                 graphviz += std::format("{} -> {} [color=\"{}\", penwidth={}, label=\"{}\"];\n",
-                    connections[i].input, connections[i].output, (connections[i].multiplier > 0) ? "green" : "red", std::fabs(connections[i].multiplier), connections[i].multiplier);
+                    napse.input, napse.output, (napse.multiplier > 0) ? "green" : "red", std::fabs(napse.multiplier), napse.multiplier);
             }
             return graphviz;
         }
 
-        std::string compile(const std::string& code) override {
+        std::string compile(const void * code) override {
             return NULL;
         }
 
-        size_t run(const std::string& code, char input[256], char output[256], size_t max) override {
-            const struct Synapse * connections = reinterpret_cast<const struct Synapse *>(code.data());
-            size_t amount = code.size() / sizeof(struct Synapse);
+        size_t run(const void * code, char input[256], char output[256], size_t max) override {
+            const struct Brain * brain = reinterpret_cast<const struct Brain *>(code);
+            const float* __restrict weights = brain->weights;
+            const unsigned short* __restrict outputs = brain->outputs;
+
             float neuron[256] = {0};
-            unsigned short current_id = -1;
+            unsigned short current_neuron = -1;
             char options[3] = {' ', 'O', 'X'};
 
             // cycle loop, exit when found
             for (int count = 0; count < 10; count++) {
-                size_t current_synapse = 0;
-                for (current_id = 0; current_id < 27; current_id++) {
-                    bool fire = input[current_id / 3] == options[current_id % 3];
-                    while(connections[current_synapse].input == current_id && current_synapse < amount) {
-                        // if has to be within, because it has to cycle through regardless
-                        if (fire)
-                            neuron[connections[current_synapse].output] += connections[current_synapse].multiplier;
+                for (int position = 0; position < 9; position++)
+                    for (int offset = 0; offset < 3; offset++)
+                        if(input[position] == options[offset])
+                            for (int synapse = brain->head[position * 3 + offset]; synapse < brain->tail[position * 3 + offset]; synapse++)
+                                neuron[outputs[synapse]] += weights[synapse];
 
-                        // printf("checking if %d at %d is equal to %d condition %s\n", input[current_id / 3], current_id, options[current_id % 3], input[current_id] == options[current_id % 3] ? "true" : "false");
-                        // printf("running %d -> %d now @ %f\n", current_id, connections[current_synapse].output, neuron[connections[current_synapse].output]);
-                        current_synapse++;
+                for (current_neuron = 27; current_neuron < 247; current_neuron++) {
+                    if (neuron[current_neuron] >= THRESHOLD) {
+                        for (int synapse = brain->head[current_neuron]; synapse < brain->tail[current_neuron]; synapse++) {
+                            neuron[outputs[synapse]] += weights[synapse];
+                        }
+                        neuron[current_neuron] = 0;
                     }
-                }
-    
-                for (current_id = 27; current_id < 247; current_id++) {
-                    bool fire = neuron[current_id] >= THRESHOLD;
-                    while(connections[current_synapse].input == current_id && current_synapse < amount) {
-                        // if has to be within, because it has to cycle through regardless
-                        if (fire)
-                            neuron[connections[current_synapse].output] += connections[current_synapse].multiplier;
-                        current_synapse++;
-                    }
-                    if (fire)
-                        neuron[current_id] = 0;
                     else
-                        neuron[current_id] *= LEAK; 
+                        neuron[current_neuron] *= LEAK;
                 }
 
                 // deplete battery / output
-                for (current_id = 247; current_id < 256; current_id++) {
-                    neuron[current_id] *= DRAIN;
+                for (current_neuron = 247; current_neuron < 256; current_neuron++) {
+                    neuron[current_neuron] *= DRAIN;
                 }
             }
 
@@ -170,21 +158,30 @@ class Network : public Engine {
             return 0;
         }
 
-        bool equal(const std::string& first, const std::string& second) override {
-            const struct Synapse * first_connections = reinterpret_cast<const struct Synapse *>(first.data());
-            size_t first_amount = first.size() / sizeof(struct Synapse);
-            const struct Synapse * second_connections = reinterpret_cast<const struct Synapse *>(second.data());
-            size_t second_amount = second.size() / sizeof(struct Synapse);
+        bool equal(const void * first, const void * second) override {
+            const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(first);
+            const struct Brain * brain2 = reinterpret_cast<const struct Brain *>(second);
+            int neuron;
 
-            if (first_amount != second_amount)
-                return false;
-
-            // backwards is probably faster cause most random additions will be at the end
-            for (size_t i = first_amount; i-- > 0;) {
-                if (first_connections[i].input != second_connections[i].input || first_connections[i].output != second_connections[i].output)
+            for (neuron = SIZE - 1; neuron >= 0; neuron++) {
+                if (brain1->tail[neuron] - brain1->head[neuron] != brain2->tail[neuron] - brain2->head[neuron]) {
                     return false;
+                }
+            }
+
+            for (neuron = SIZE - 1; neuron >= 0; neuron++) {
+                for (int synapse = 0; synapse < brain1->tail[neuron] - brain1->head[neuron]; synapse++) {
+                    if (brain1->outputs[brain1->head[neuron] + synapse] != brain2->outputs[brain2->head[neuron] + synapse]) {
+                        return false;
+                    }
+                }
             }
             return true;
+        }
+
+        size_t size(const void * code) {
+            const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(code);
+            return brain1->size;
         }
 };
 
