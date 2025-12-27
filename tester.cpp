@@ -39,6 +39,31 @@ int main() {
         .score = 0,
     };
 
+    Synapse connections2[] = {
+        {0, 100, 1.0},
+        {3, 103, 1.0},
+        {6, 106, 1.0},
+        {9, 109, 1.0},
+        {12, 112, 1.0},
+        {15, 115, 1.0},
+        {18, 118, 1.0},
+        {21, 121, 1.0},
+        {24, 124, 1.0},
+        {100, 247, 1.0},
+        {103, 248, 1.0},
+        {106, 249, 1.0},
+        {109, 250, 1.0},
+        {112, 251, 1.0},
+        {115, 252, 1.0},
+        {118, 253, 1.0},
+        {121, 254, 1.0},
+        {124, 255, 1.0},
+    };
+    struct Brain * brain2 = new Brain();
+
+    for(Synapse new_napse : connections2) {
+        brain2->add_synapse(new_napse);        
+    }
 
     tester->score(&prog, engine, NULL);
     // srand(time(NULL));

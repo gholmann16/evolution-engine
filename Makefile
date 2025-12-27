@@ -1,4 +1,4 @@
-CFLAGS := -Wall -c -O3 -g -Wno-deprecated-declarations -std=c++20 -march=native
+CFLAGS := -Wall -c -O3 -g -Wno-deprecated-declarations -std=c++20 -march=native -flto
 LDLIBS := -flto
 
 monolith.out: cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o tic_off.o network.o

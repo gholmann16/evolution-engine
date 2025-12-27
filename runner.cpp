@@ -123,7 +123,7 @@ void quit(int sig) {
 
 int runner(struct State state) {
     signal(SIGINT, quit);
-    Test * tester = create_tic_off();
+    Test * tester = create_tictactoe();
     Engine * engine = create_network();
     // Set the default, fill whole thing cause why not
     last.code = engine->ancestor_prog();

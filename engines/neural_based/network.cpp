@@ -19,6 +19,27 @@ class Network : public Engine {
             };
         }
 
+        void leak(float neuron[256], bool to_fire[256]) {
+            for (int i = 28; i < 256; i++) {
+                neuron[i] *= LEAK;
+                to_fire[i] = neuron[i] >= THRESHOLD;
+            }
+        }
+
+        void fire(float neuron[256], bool to_fire[256], const struct Brain * brain) {
+            const float* __restrict weights = brain->weights;
+            const unsigned short* __restrict outputs = brain->outputs;
+
+            for (int i = 0; i <= 246; i++) {
+                if (to_fire[i]) {
+                    for (int synapse = brain->head[i]; synapse < brain->tail[i]; synapse++) {
+                        neuron[outputs[synapse]] += weights[synapse];
+                    }
+                    neuron[i] = THRESHOLD - 1.0;
+                }
+            }
+        }
+
     public:
         void * ancestor_prog() override {
             struct Brain * brain = new Brain();
@@ -94,15 +115,13 @@ class Network : public Engine {
             }
         }
 
-        // uses graphviz to output https://dreampuf.github.io/GraphvizOnline/
         std::string debug(const void * code) override {
             const struct Brain * brain = reinterpret_cast<const struct Brain *>(code);
-            std::string graphviz;
+            std::string output;
             for (Synapse napse : *brain) {
-                graphviz += std::format("{} -> {} [color=\"{}\", penwidth={}, label=\"{}\"];\n",
-                    napse.input, napse.output, (napse.multiplier > 0) ? "green" : "red", std::fabs(napse.multiplier), napse.multiplier);
+                output += std::format("{{{}, {}, {:.9g}}},\n", napse.input, napse.output, napse.multiplier);
             }
-            return graphviz;
+            return output;
         }
 
         std::string compile(const void * code) override {
@@ -111,36 +130,20 @@ class Network : public Engine {
 
         size_t run(const void * code, char input[256], char output[256], size_t max) override {
             const struct Brain * brain = reinterpret_cast<const struct Brain *>(code);
-            const float* __restrict weights = brain->weights;
-            const unsigned short* __restrict outputs = brain->outputs;
-
-            float neuron[256] = {0};
-            unsigned short current_neuron = -1;
             char options[3] = {' ', 'O', 'X'};
+            float neuron[256] = {0};
+            bool to_fire[256] = {0};
+
+            for (int position = 0; position < 9; position++)
+                for (int offset = 0; offset < 3; offset++)
+                    if(input[position] == options[offset])
+                        to_fire[position * 3 + offset] = true;
+            
 
             // cycle loop, exit when found
             for (int count = 0; count < 10; count++) {
-                for (int position = 0; position < 9; position++)
-                    for (int offset = 0; offset < 3; offset++)
-                        if(input[position] == options[offset])
-                            for (int synapse = brain->head[position * 3 + offset]; synapse < brain->tail[position * 3 + offset]; synapse++)
-                                neuron[outputs[synapse]] += weights[synapse];
-
-                for (current_neuron = 27; current_neuron < 247; current_neuron++) {
-                    if (neuron[current_neuron] >= THRESHOLD) {
-                        for (int synapse = brain->head[current_neuron]; synapse < brain->tail[current_neuron]; synapse++) {
-                            neuron[outputs[synapse]] += weights[synapse];
-                        }
-                        neuron[current_neuron] = 0;
-                    }
-                    else
-                        neuron[current_neuron] *= LEAK;
-                }
-
-                // deplete battery / output
-                for (current_neuron = 247; current_neuron < 256; current_neuron++) {
-                    neuron[current_neuron] *= DRAIN;
-                }
+                leak(neuron, to_fire);
+                fire(neuron, to_fire, brain);
             }
 
             // output 247-255
@@ -163,13 +166,18 @@ class Network : public Engine {
             const struct Brain * brain2 = reinterpret_cast<const struct Brain *>(second);
             int neuron;
 
-            for (neuron = SIZE - 1; neuron >= 0; neuron++) {
+            /*
+             * Can't use iterator cause there's two
+             * Check synapse count discrepancies first because it's faster
+             * Reverse order because input neurons are standardized at the beginning
+             */
+            for (neuron = SIZE - 1; neuron >= 0; neuron--) {
                 if (brain1->tail[neuron] - brain1->head[neuron] != brain2->tail[neuron] - brain2->head[neuron]) {
                     return false;
                 }
             }
 
-            for (neuron = SIZE - 1; neuron >= 0; neuron++) {
+            for (neuron = SIZE - 1; neuron >= 0; neuron--) {
                 for (int synapse = 0; synapse < brain1->tail[neuron] - brain1->head[neuron]; synapse++) {
                     if (brain1->outputs[brain1->head[neuron] + synapse] != brain2->outputs[brain2->head[neuron] + synapse]) {
                         return false;
