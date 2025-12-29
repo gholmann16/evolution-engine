@@ -1,5 +1,5 @@
 #pragma once
-#define VERBOSE true
+#define VERBOSE true// struct Program * total_winners^2
 
 struct Program {
     void * code;
@@ -7,12 +7,12 @@ struct Program {
 };
 
 struct State {
-    long int seed;
+    struct Program * children;
+    unsigned long long seed;
     int runs;
-    int total_winners;
     int def_rand;
     int repetitions;
-    struct Program * children; // struct Program * total_winners^2
+    int total_creatures;
 };
 
 struct State def_state();

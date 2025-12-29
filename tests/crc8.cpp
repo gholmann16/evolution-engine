@@ -58,7 +58,7 @@ class Crc8 : public Test {
 
         int current_generation = -1;
     public:
-        void score(struct Program * prog, Engine * engine, const State * state) {
+        unsigned long long score(const void * code, Engine * engine, const State * state) override {
             if (current_generation != state->runs) {
                 current_generation = state->runs;
                 prepare_answer();
@@ -70,16 +70,14 @@ class Crc8 : public Test {
                 alignas(256) char input[256];
                 memcpy(input, inputs[times], 256);
 
-                runtime += engine->run(prog->code, &input[times], &output[times], LOOP_MAX - runtime);
-                if (runtime == LOOP_MAX || expect[times][0] != output[0]) {
-                    prog->score = LOOP_MAX * 50;
-                    return;
-                }
+                runtime += engine->run(code, &input[times], &output[times], LOOP_MAX - runtime);
+                if (runtime == LOOP_MAX || expect[times][0] != output[0])
+                    return LOOP_MAX * 50;
 
                 times++;
             }
 
-            prog->score = runtime + engine->size(prog->code) * 5;
+            return runtime + engine->size(code) * 5;
         }
 
         ~Crc8() {

@@ -4,16 +4,16 @@
 // 1 v 1 tic tac toe
 class Tic_Off : public Test {
     private:
-        bool won(char board[256], char player) {
+        bool won(char board[256]) {
             if (
-                (board[0] == player && board[1] == player && board[2] == player) ||
-                (board[3] == player && board[4] == player && board[5] == player) ||
-                (board[6] == player && board[7] == player && board[8] == player) ||
-                (board[0] == player && board[3] == player && board[6] == player) ||
-                (board[1] == player && board[4] == player && board[7] == player) ||
-                (board[2] == player && board[5] == player && board[8] == player) ||
-                (board[0] == player && board[4] == player && board[8] == player) ||
-                (board[2] == player && board[4] == player && board[6] == player)
+                (board[0] == 'X' && board[1] == 'X' && board[2] == 'X') ||
+                (board[3] == 'X' && board[4] == 'X' && board[5] == 'X') ||
+                (board[6] == 'X' && board[7] == 'X' && board[8] == 'X') ||
+                (board[0] == 'X' && board[3] == 'X' && board[6] == 'X') ||
+                (board[1] == 'X' && board[4] == 'X' && board[7] == 'X') ||
+                (board[2] == 'X' && board[5] == 'X' && board[8] == 'X') ||
+                (board[0] == 'X' && board[4] == 'X' && board[8] == 'X') ||
+                (board[2] == 'X' && board[4] == 'X' && board[6] == 'X')
             ) {
                 // printf("%c | %c | %c\n", board[0], board[1], board[2]);
                 // printf("%c | %c | %c\n", board[3], board[4], board[5]);
@@ -26,45 +26,65 @@ class Tic_Off : public Test {
                 return false;
         }
 
-        bool place(char board[256], unsigned char spot, char player) {
+        bool place(char board[256], unsigned char spot) {
             if (board[spot] == ' ') {
-                board[spot] = player;
+                board[spot] = 'X';
                 return false;
             }
             return true;
         }
 
-        // false = 0 = first wins
-        // true = 1 = second wins
-        bool fight(const void * first, const void * second, Engine * engine) {
+        void flip(char board[256]) {
+            for (int i = 0; i < 9; i++) {
+                switch(board[i]) {
+                    case 'X':
+                        board[i] = 'O';
+                        break;
+                    case 'O':
+                        board[i] = 'X';
+                        break;
+                }
+            }
+        }
+
+        /*
+        +1 - first wins
+         0 - tie
+        -1 - second wins
+        We actually need to flip each time, because if given a board state at random
+        where you don't know who you are, then how are you supposed to make the right choice?
+        Tester is always scoring for X so we simulate that with flip()
+        */ 
+        // 
+        int fight(const void * first, const void * second, Engine * engine) {
             alignas(256) char board[256] = "         ";
             alignas(256) char output[256];
-            if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0], 'X'))
-                return true;
+            if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0]))
+                return -1;
             for (int i = 0; i < 4; i++) {
-                if (engine->run(second, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0], 'O'))
-                    return false;
-                if (won(board, 'O'))
-                    return true;
-                if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0], 'X'))
-                    return true;
-                if (won(board, 'X'))
-                    return false;
+                flip(board);
+                if (engine->run(second, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0]))
+                    return 1;
+                if (won(board))
+                    return -1;
+                flip(board);
+                if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0]))
+                    return -1;
+                if (won(board))
+                    return 1;
             }
-            // if no one won, give it to second, because they didn't have the advantage
-            return first > second ? true : false; // if first is larger, second wins
+            return 0;
         }
 
     public:
-        void score(struct Program * prog, Engine * engine, const State * state) {
+        unsigned long long score(const void * code, Engine * engine, const State * state) {
             // 100 winners of last generation, who don't play cause they already have a score
-            size_t total = 0;
-            for (int i = 0; i < state->total_winners; i++) {
-                total += fight(prog->code, state->children[i].code, engine); // if second win +1 (higher score worse)
-                total += !fight(state->children[i].code, prog->code, engine); // if second win + (!1) = +0 (lower score better)
+            unsigned long long total = 0;
+            for (int i = 0; i < state->total_creatures; i++) {
+                total += fight(code, state->children[i].code, engine) == -1; // if second win, 1, otherwise 0 (lower score better)
+                total += fight(state->children[i].code, code, engine) == 1; // If first wins, add 1 
             }
-            if (total)
-                prog->score = 50 * total;
+            return total ? 50 * total + engine->size(code) : 0;
         }
 };
 

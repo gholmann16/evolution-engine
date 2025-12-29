@@ -1,9 +1,10 @@
+#pragma once
 #include "../engines/engine.hpp"
 #include "../state.hpp"
 
 class Test {
     public:
-        virtual void score(struct Program * prog, Engine * engine, const State * state) = 0;
+        virtual unsigned long long score(const void * code, Engine * engine, const State * state) = 0;
 };
 
 // All the tests:

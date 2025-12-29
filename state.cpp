@@ -5,10 +5,10 @@
 
 struct State def_state() {
     return (struct State) {
-        .seed = time(NULL),
-        .total_winners = NUM_WIN,
-        .def_rand = DEFAULT_RANDOMNESS,
         .children = new Program[NUM_WIN * NUM_WIN],
+        .seed = (long long unsigned int) time(NULL),
+        .def_rand = DEFAULT_RANDOMNESS,
+        .total_creatures = NUM_WIN * NUM_WIN,
     };
 }
 

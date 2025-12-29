@@ -37,8 +37,8 @@ class TicTacToe : public Test {
             return true;
         }
 
-        size_t total_runtime;
-        size_t play_game(struct Program * prog, Engine * engine, char board[256], char output[256], int empty, char player, char other) {
+        unsigned long long total_runtime;
+        unsigned long long play_game(const void * code, Engine * engine, char board[256], char output[256], int empty, char player, char other) {
             alignas(256) char save_board[256];
             int total_recursive_score = 0;
 
@@ -54,7 +54,7 @@ class TicTacToe : public Test {
                 if (empty == 1)
                     continue; // aka total_score += 0
 
-                total_runtime += engine->run(prog->code, save_board, output, MAX_RUNTIME - total_runtime);
+                total_runtime += engine->run(code, save_board, output, MAX_RUNTIME - total_runtime);
                 if (place(save_board, output[0], player)) {
                     // couldn't place it, so guaranteed did not win, also guaranteed not empty
                     switch(empty) {
@@ -88,26 +88,25 @@ class TicTacToe : public Test {
                 if (won(save_board, player))
                     total_recursive_score += 0;
                 else if (empty)
-                    total_recursive_score += play_game(prog, engine, save_board, output, empty - 2, player, other);
+                    total_recursive_score += play_game(code, engine, save_board, output, empty - 2, player, other);
             }
             return total_recursive_score;
         }
     public:
-        void score(struct Program * prog, Engine * engine, const State * state) override {
+        unsigned long long score(const void * code, Engine * engine, const State * state) override {
             alignas(256) char output[256] = {0};
             alignas(256) char board[256] = "         ";
             alignas(256) char board2[256] = "         ";
-            total_runtime = engine->run(prog->code, board, output, MAX_RUNTIME);
-            size_t lost = place(board, output[0], 'X') ? 384 : play_game(prog, engine, board, output, 8, 'X', 'O');
-            lost += play_game(prog, engine, board2, output, 9, 'O', 'X');
+            total_runtime = engine->run(code, board, output, MAX_RUNTIME);
+            unsigned long long lost = place(board, output[0], 'X') ? 384 : play_game(code, engine, board, output, 8, 'X', 'O');
+            lost += play_game(code, engine, board2, output, 9, 'O', 'X');
 
-            if (total_runtime >= MAX_RUNTIME) {
-                prog->score = MAX_RUNTIME * 50;
-                return;
-            }
-
-            if (lost)
-                prog->score = lost * 50 + engine->size(prog->code);
+            if (total_runtime >= MAX_RUNTIME)
+                return MAX_RUNTIME * 50;
+            else if (lost)
+                return lost * 50 + engine->size(code);
+            else
+                return 0;
         }
 };
 
