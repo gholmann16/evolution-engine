@@ -6,10 +6,14 @@ class Squarelite : public Evolver {
     private:
         int square = 0;
     public:
-        unsigned long long evolve(Test * tester, Engine * engine, const struct State state) {
-            if (!square)
-                square = (int)sqrt(state.total_creatures);
+        Squarelite(Test * tester, Engine * engine, const struct State state) {
+            square = (int)sqrt(state.total_creatures);
+            // doesn't score the first 100, so for the first generation we need to manually score
+            for (int i = 0; i < square; i++)
+                state.children[i].score = tester->score(state.children[i].code, engine, &state);
+        }
 
+        void evolve(Test * tester, Engine * engine, const struct State state) {
             // Evolve from winning pool
             for (int winner = 0; winner < square; winner++) {
                 // Keep the winner around so you never regress (agamogenesis) and reset
@@ -19,23 +23,17 @@ class Squarelite : public Evolver {
                     state.children[grandchild * square + winner].score = 0;
                 }
             }
-            return 0;
         }
 
-        unsigned long long score_all(Test * tester, Engine * engine, const struct State state) {
-            unsigned long long total_score = 0;
+        void score_all(Test * tester, Engine * engine, const struct State state) {
             // no reason to re-test the winners since we're not changing them
             for (int i = square; i < state.total_creatures; i++) {
                 state.children[i].score = tester->score(state.children[i].code, engine, &state);
-                printf("%lld\t", state.children[i].score);
-                total_score += state.children[i].score;
             }
-            return total_score;
         }
 
-        unsigned long long sort(Test * tester, Engine * engine, const struct State state) {
+        void sort(Test * tester, Engine * engine, const struct State state) {
             std::sort(state.children, state.children + state.total_creatures, compare_ratings);
-
             // Get winning pool, shoot for diversity
             int found = 1;
             for (int candidate = 1; candidate < state.total_creatures && found < square; candidate++) {
@@ -46,15 +44,23 @@ class Squarelite : public Evolver {
                 * Conveniently, the worse dna of the batch because the winners will stay winners
                 * Frees everything we need, since parent and children share a pool
                 */
-                if (engine->equal(state.children[candidate].code, state.children[found - 1].code) == false)
-                    state.children[found++] = state.children[candidate];
+                if (engine->equal(state.children[candidate].code, state.children[found - 1].code) == false) {
+                    // it won't be read again unless candidate will be overwritten too, in which case it might reduce some diversity
+                    struct Program tmp;
+                    tmp = state.children[found];
+                    state.children[found] = state.children[candidate];
+                    state.children[candidate] = tmp;
+                    found++;
+                }
             }
-            while (found < square)
-                state.children[found++] = state.children[0];
-            return state.children[0].score;
+            while (found < square) {
+                state.children[found].score = state.children[0].score;
+                engine->copy_into(state.children[0].code, state.children[found].code);
+                found++;
+            }
         }
 };
 
-Evolver * create_squarelite() {
-    return new Squarelite();
+Evolver * create_squarelite(Test * tester, Engine * engine, const struct State state) {
+    return new Squarelite(tester, engine, state);
 }

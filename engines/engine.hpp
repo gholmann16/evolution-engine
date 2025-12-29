@@ -10,13 +10,14 @@ class Engine {
 
         // Evolving
         virtual void * ancestor_prog() = 0;
-        virtual void evolve(const void * parent, void * child, size_t randomness) = 0; 
+        virtual void evolve(const void * parent, void * child, size_t randomness) = 0;
 
         // Utility
         virtual std::string debug(const void * code) = 0; // Should be an allocated string
         virtual std::string compile(const void * code) = 0; // Allocated string ready to be passed to assembler
         virtual bool equal(const void * first, const void * second) = 0;
         virtual size_t size(const void * code) = 0;
+        virtual void copy_into(const void * parent, void * child) = 0;
 };
 
 Engine * create_brainfuck(char * initial);

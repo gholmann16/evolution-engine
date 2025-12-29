@@ -147,7 +147,7 @@ class Network : public Engine {
             }
 
             // output 247-255
-            float max_power = 0.0;
+            float max_power = -1.0 / 0.0;
             unsigned short best = 0;
             for (unsigned short on = 247; on < 256; on++) {
                 // printf("%d: %f\n", on, neuron[on]);
@@ -190,6 +190,15 @@ class Network : public Engine {
         size_t size(const void * code) {
             const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(code);
             return brain1->size;
+        }
+
+        void copy_into(const void * parent, void * child) {
+            const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(parent);
+            struct Brain * brain2 = reinterpret_cast<struct Brain *>(child);
+            brain2->clear();
+            for (Synapse napse : *brain1) {
+                brain2->add_synapse(napse);
+            }
         }
 };
 

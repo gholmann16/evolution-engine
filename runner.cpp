@@ -54,14 +54,13 @@ void quit(int sig) {
     running = false;
 }
 
-unsigned long long time_func(std::function<unsigned long long(Test *, Engine *, const struct State)> fn, Test * tester, Engine * engine, const struct State state, const char * line) {
+void time_func(std::function<void(Test *, Engine *, const struct State)> fn, Test * tester, Engine * engine, const struct State state, const char * line) {
     double before = clock();
-    unsigned long ret = fn(tester, engine, state);
+    fn(tester, engine, state);
     double after = clock();
     if (VERBOSE) {
         printf("Time %s: %lf\n", line, (after - before) / CLOCKS_PER_SEC);
     }
-    return ret;
 }
 
 int runner(struct State state) {
@@ -69,28 +68,36 @@ int runner(struct State state) {
     // Test * tester = create_tic_off();
     Test * tester = create_tictactoe();
     Engine * engine = create_network();
-    Evolver * evolver = create_squarelite();
     // Set the default, fill whole thing cause why not
     last_code = engine->ancestor_prog();
     for(int ancestor = 0; ancestor < state.total_creatures; ancestor++) {
         state.children[ancestor].code = engine->ancestor_prog();
         state.children[ancestor].score = -1;
     }
+    Evolver * evolver = create_squarelite(tester, engine, state);
 
     std::ofstream file("data.txt");
     file << "# X Y Z\n";
+
+    int percentile[] = {100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 80, 70, 60, 50, 40, 30, 20, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    for (int& mod : percentile) {
+        mod *= (state.total_creatures - 1);
+        mod /= 100;
+    }
 
     while (running && state.runs < EXECUTIONS) {
         // Determinism
         srand(state.seed + state.runs);
 
         time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->evolve(tester, engine, state); }, tester, engine, state, "generating");
-        unsigned long long total = time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->score_all(tester, engine, state); }, tester, engine, state, "generating");
-        unsigned long long best = time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->sort(tester, engine, state); }, tester, engine, state, "generating");
+        time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->score_all(tester, engine, state); }, tester, engine, state, "generating");
+        time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->sort(tester, engine, state); }, tester, engine, state, "generating");
 
         state.runs++;
-        printf("\n TOTAL SCORE = %lld\n", total);
-        file << state.runs << " " << best << " " << total << "\n";
+        file << state.runs;
+        for (int x : percentile)
+            file << " " << state.children[x].score;
+        file << "\n";
         if (cli_interpret(state, engine) == false)
             break;
     }

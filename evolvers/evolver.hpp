@@ -9,15 +9,10 @@ class Evolver {
             return first.score < second.score;
         }
 
-        // not sure what to return yet
-        virtual unsigned long long evolve(Test * tester, Engine * engine, const struct State state) = 0;
-
-        // returns total score
-        virtual unsigned long long score_all(Test * tester, Engine * engine, const struct State state) = 0;
-
-        // returns best score
-        virtual unsigned long long sort(Test * tester, Engine * engine, const struct State state) = 0;
+        virtual void evolve(Test * tester, Engine * engine, const struct State state) = 0;
+        virtual void score_all(Test * tester, Engine * engine, const struct State state) = 0;
+        virtual void sort(Test * tester, Engine * engine, const struct State state) = 0;
 };
 
-Evolver * create_squarelite();
-Evolver * create_above_average();
+Evolver * create_squarelite(Test * tester, Engine * engine, const struct State state);
+Evolver * create_above_average(Test * tester, Engine * engine, const struct State state);

@@ -65,4 +65,10 @@ class Brainfuck_Base : public Engine {
             const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
             return code_ref.size();
         }
+
+        void copy_into(const void * parent, void * child) {
+            const std::string& parent_ref = *reinterpret_cast<const std::string*>(parent);
+            std::string& child_ref = *reinterpret_cast<std::string*>(child);
+            child_ref = parent_ref;
+        }
 };

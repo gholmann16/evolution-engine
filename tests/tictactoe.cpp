@@ -30,6 +30,8 @@ class TicTacToe : public Test {
         }
 
         bool place(char board[256], unsigned char spot, char player) {
+            if (spot >= 9)
+                return true;
             if (board[spot] == ' ') {
                 board[spot] = player;
                 return false;
