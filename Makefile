@@ -1,8 +1,8 @@
 CFLAGS := -Wall -c -O3 -g -Wno-deprecated-declarations -std=c++20 -march=native -flto
 LDLIBS := -flto
 
-monolith.out: cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o tic_off.o network.o above_average.o squarelite.o
-	g++ $(LDLIBS) cli.o runner.o state.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o tic_off.o above_average.o squarelite.o -o monolith.out
+monolith.out: cli.o runner.o assembler.o brainfuck.o output.o tictactoe.o crc8.o tic_off.o network.o above_average.o squarelite.o
+	g++ $(LDLIBS) cli.o runner.o assembler.o brainfuck.o output.o tictactoe.o crc8.o network.o tic_off.o above_average.o squarelite.o -o monolith.out
 
 gui: CFLAGS += `pkg-config --cflags libadwaita-1`
 gui: LDLIBS += `pkg-config --libs libadwaita-1`

@@ -1,5 +1,6 @@
 #pragma once
 #define VERBOSE true// struct Program * total_winners^2
+#define HALL_OF_FAMERS 100
 
 struct Program {
     void * code;
@@ -8,6 +9,7 @@ struct Program {
 
 struct State {
     struct Program * children;
+    void * hall_of_fame[HALL_OF_FAMERS];
     unsigned long long seed;
     int runs;
     int def_rand;
