@@ -86,8 +86,8 @@ int runner() {
     };
 
     signal(SIGINT, quit);
-    // Test * tester = create_tic_off();
     Test * tester = create_tictactoe();
+    // Test * absolute = create_tictactoe();
     Engine * engine = create_network();
     // Set the default, fill whole thing cause why not
     for(int ancestor = 0; ancestor < state.total_creatures; ancestor++) {
@@ -97,37 +97,39 @@ int runner() {
     for (int famer = 0; famer < HALL_OF_FAMERS; famer++)
         state.hall_of_fame[famer] = engine->ancestor_prog();
 
-    Evolver * evolver = create_squarelite(tester, engine, state);
-
-    std::ofstream file("data.txt");
-    file << "# X Y Z\n";
-
+    Evolver * evolver = create_above_average(tester, engine, state);
     int percentile[] = {100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 80, 70, 60, 50, 40, 30, 20, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
     for (int& mod : percentile) {
         mod *= (state.total_creatures - 1);
         mod /= 100;
     }
 
+    // Clear past data
+    std::ofstream ofs("data.txt", std::ofstream::out | std::ofstream::trunc);
+    ofs.close();
+
     while (running && state.runs < EXECUTIONS) {
         // Determinism
         srand(state.seed + state.runs);
 
         time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->evolve(tester, engine, state); }, tester, engine, state, "generating");
-        time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->score_all(tester, engine, state); }, tester, engine, state, "generating");
-        time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->sort(tester, engine, state); }, tester, engine, state, "generating");
+        time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->score_all(tester, engine, state); }, tester, engine, state, "scoring");
+        time_func([&](Test * tester, Engine * engine, const struct State state) { return evolver->sort(tester, engine, state); }, tester, engine, state, "sorting");
+
+        std::ofstream file("data.txt", std::ios::app);
 
         state.runs++;
         file << state.runs;
-        for (int x : percentile)
+        for (int x : percentile) {
+            // state.children[x].score = absolute->score(state.children[x].code, engine, &state);
             file << " " << state.children[x].score;
+        }
         file << "\n";
+        file.close();
+
         if (cli_interpret(state, engine) == false)
             break;
     }
-    file.close();
-
-    // if (running == false)
-        // save(state);
 
     delete[] state.children;
     return 0;

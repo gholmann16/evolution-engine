@@ -31,3 +31,8 @@ plot "data.txt" using 1:2 with lines lc "black" title "100th percentile", \
     "data.txt" using 1:29 with lines lc "grey50" title "1st percentile", \
     "data.txt" using 1:30 with lines lc "black" title "0th percentile"
 set term qt
+
+while (1) {
+    replot      # Redraws the plot with new data from the file
+    pause 20     # Wait for 1 second (adjust time as needed)
+}

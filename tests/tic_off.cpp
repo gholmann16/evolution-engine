@@ -79,12 +79,12 @@ class Tic_Off : public Test {
     public:
         unsigned long long score(const void * code, Engine * engine, const State * state) {
             // 100 winners of last generation, who don't play cause they already have a score
-            unsigned long long total = 0;
-            for (int i = 0; i < state->total_creatures; i++) {
-                total += fight(code, state->children[i].code, engine) == -1; // if second win, 1, otherwise 0 (lower score better)
-                total += fight(state->children[i].code, code, engine) == 1; // If first wins, add 1 
+            unsigned long long total = HALL_OF_FAMERS * 2;
+            for (int i = 0; i < HALL_OF_FAMERS; i++) {
+                total -= fight(code, state->hall_of_fame[i], engine); // if first wins, subtract 1 (better)
+                total += fight(state->hall_of_fame[i], code, engine); // if first wins, add 1 (worse)
             }
-            return total ? 50 * total + engine->size(code) : 0;
+            return 50 * total + engine->size(code);
         }
 };
 
