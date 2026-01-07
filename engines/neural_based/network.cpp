@@ -1,5 +1,4 @@
 #include "brain.hpp"
-#include "../engine.hpp"
 #include <set>
 #include <string>
 #include <cmath>
@@ -201,7 +200,3 @@ class Network : public Engine {
             }
         }
 };
-
-Engine * create_network() {
-    return new Network();
-}

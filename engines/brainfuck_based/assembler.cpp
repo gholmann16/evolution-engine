@@ -26,10 +26,10 @@ unsigned char per[] = {
     0x88, 0x01, // mov byte ptr[rcx], al (move temp to output)
     0xFE, 0xC1, // inc cl
 };
-unsigned char open[] = {
+unsigned char beg[] = {
     0xE9, 0x00, 0x00, 0x00, 0x00, // jmp + offset, have to go fill the offset.
 };
-unsigned char close[] = {
+unsigned char end[] = {
     0x48, 0xff, 0xce, // dec rsi
     0x48, 0x85, 0xF6, // test rsi, rsi
     0x75, 0x01, // jnz SHORT 1
@@ -49,7 +49,7 @@ class JitFuck : public Brainfuck_Base {
         const char * last = NULL;
 
     public:
-        JitFuck(char * initial) : Brainfuck_Base(initial) {
+        JitFuck() {
             program = (char*) mmap(NULL, // address
                 4096 * 256, // page sizes are 4096, alloacte 256 so we always have space
                 PROT_READ | PROT_WRITE | PROT_EXEC,
@@ -106,17 +106,17 @@ class JitFuck : public Brainfuck_Base {
                         append(program, &index, per, sizeof(per));
                         break;
                     case '[':
-                        append(program, &index, open, sizeof(open));
+                        append(program, &index, beg, sizeof(beg));
                         vec[brackets++] = index;
                         break;
                     case ']':
                         if (brackets == 0)
                             return max;
 
-                        append(program, &index, close, sizeof(close));
+                        append(program, &index, end, sizeof(end));
                         int offset = vec[--brackets] - index;
-                        *(int *)(program + index - 4) = offset; // 4 less than the index after adding close
-                        int skip = -offset - sizeof(close); // for the forward jump, don't skip this part
+                        *(int *)(program + index - 4) = offset; // 4 less than the index after adding end
+                        int skip = -offset - sizeof(end); // for the forward jump, don't skip this part
                         *(int *)(program + index + offset - 4) = skip;
                         break;
                 }
@@ -153,7 +153,3 @@ class JitFuck : public Brainfuck_Base {
 
         }
 };
-
-Engine * create_jitfuck(char * initial) {
-    return new JitFuck(initial);
-}

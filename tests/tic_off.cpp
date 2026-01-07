@@ -1,10 +1,9 @@
-#include "test.hpp"
-#define MAX_RUNTIME 1000000
+#define MAX_TIC_OFF 100000
 
 // 1 v 1 tic tac toe
 class Tic_Off : public Test {
     private:
-        bool won(char board[256]) {
+        static bool won(char board[256]) {
             if (
                 (board[0] == 'X' && board[1] == 'X' && board[2] == 'X') ||
                 (board[3] == 'X' && board[4] == 'X' && board[5] == 'X') ||
@@ -26,7 +25,7 @@ class Tic_Off : public Test {
                 return false;
         }
 
-        bool place(char board[256], unsigned char spot) {
+        static bool place(char board[256], unsigned char spot) {
             if (board[spot] == ' ') {
                 board[spot] = 'X';
                 return false;
@@ -34,7 +33,7 @@ class Tic_Off : public Test {
             return true;
         }
 
-        void flip(char board[256]) {
+        static void flip(char board[256]) {
             for (int i = 0; i < 9; i++) {
                 switch(board[i]) {
                     case 'X':
@@ -56,19 +55,19 @@ class Tic_Off : public Test {
         Tester is always scoring for X so we simulate that with flip()
         */ 
         // 
-        int fight(const void * first, const void * second, Engine * engine) {
+        static int fight(const void * first, const void * second) {
             alignas(256) char board[256] = "         ";
             alignas(256) char output[256];
-            if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0]))
+            if (State::engine->run(first, board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
                 return -1;
             for (int i = 0; i < 4; i++) {
                 flip(board);
-                if (engine->run(second, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0]))
+                if (State::engine->run(second, board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
                     return 1;
                 if (won(board))
                     return -1;
                 flip(board);
-                if (engine->run(first, board, output, MAX_RUNTIME) == MAX_RUNTIME || place(board, output[0]))
+                if (State::engine->run(first, board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
                     return -1;
                 if (won(board))
                     return 1;
@@ -77,17 +76,13 @@ class Tic_Off : public Test {
         }
 
     public:
-        unsigned long long score(const void * code, Engine * engine, const State * state) {
+        size_t score(const void * code) const override {
             // 100 winners of last generation, who don't play cause they already have a score
-            unsigned long long total = HALL_OF_FAMERS * 2;
-            for (int i = 0; i < HALL_OF_FAMERS; i++) {
-                total -= fight(code, state->hall_of_fame[i], engine); // if first wins, subtract 1 (better)
-                total += fight(state->hall_of_fame[i], code, engine); // if first wins, add 1 (worse)
+            size_t total = State::total_famers * 2;
+            for (size_t i = 0; i < State::total_famers; i++) {
+                total -= fight(code, State::hall_of_fame[i]); // if first wins, subtract 1 (better)
+                total += fight(State::hall_of_fame[i], code); // if first wins, add 1 (worse)
             }
-            return 50 * total + engine->size(code);
+            return 50 * total + State::engine->size(code);
         }
 };
-
-Test * create_tic_off() {
-    return new Tic_Off();
-}

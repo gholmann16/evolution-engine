@@ -1,6 +1,4 @@
-#include <stddef.h>
 #include <string.h>
-#include "test.hpp"
 
 // Needed for little endian
 #define SWAP(x) ((x>>8) & 0xff) | ((x & 0xff)<<8)
@@ -16,7 +14,7 @@ class Crc8 : public Test {
             SWAP(0x01D5 << 4), SWAP(0x01D5 << 5), SWAP(0x01D5 << 6), SWAP(0x01D5 << 7),
         };
 
-        char crc8(char input[256]) {
+        static char crc8(char input[256]) {
             size_t size = strlen(input);
             for (size_t byte = 0; byte < size; byte++) {
                 // Obtain a short pointer for word work
@@ -31,17 +29,19 @@ class Crc8 : public Test {
             return input[size];
         }
 
-        void fill_string(char input[256]) {
+        static void fill_string(char input[256]) {
             for (int i = 0; i < 255; i++) {
                 input[i] = rand() % 256;
             }
             input[255] = 0;
         }
 
-        char ** inputs = (char **)calloc(NUM_TRIES, sizeof(char *));
-        char ** expect = (char **)calloc(NUM_TRIES, sizeof(char *));
+        inline static char ** inputs;
+        inline static char ** expect;
+        inline static size_t current_generation;
 
-        void prepare_answer() {
+        static void prepare_answer() {
+            current_generation = State::runs;
             char tmp[256];
             for (int i = 0; i < NUM_TRIES; i++) {
                 free(inputs[i]);
@@ -56,13 +56,17 @@ class Crc8 : public Test {
             }
         }
 
-        int current_generation = -1;
     public:
-        unsigned long long score(const void * code, Engine * engine, const State * state) override {
-            if (current_generation != state->runs) {
-                current_generation = state->runs;
+        Crc8() {
+            inputs = (char **)calloc(NUM_TRIES, sizeof(char *));
+            expect = (char **)calloc(NUM_TRIES, sizeof(char *));
+            current_generation = -1;
+        }
+
+        size_t score(const void * code) const override {
+            if (current_generation != State::runs)
                 prepare_answer();
-            }
+
             int times = 0;
             size_t runtime = 0;
             while (times < NUM_TRIES) {
@@ -70,14 +74,14 @@ class Crc8 : public Test {
                 alignas(256) char input[256];
                 memcpy(input, inputs[times], 256);
 
-                runtime += engine->run(code, &input[times], &output[times], LOOP_MAX - runtime);
+                runtime += State::engine->run(code, &input[times], &output[times], LOOP_MAX - runtime);
                 if (runtime == LOOP_MAX || expect[times][0] != output[0])
                     return LOOP_MAX * 50;
 
                 times++;
             }
 
-            return runtime + engine->size(code) * 5;
+            return runtime + State::engine->size(code) * 5;
         }
 
         ~Crc8() {
@@ -85,7 +89,3 @@ class Crc8 : public Test {
             free(expect);
         }
 };
-
-Test * create_crc8() {
-    return new Crc8();
-}

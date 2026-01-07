@@ -27,10 +27,6 @@ class Brainfuck : public Brainfuck_Base {
             return false;
         }
     public:
-        Brainfuck(char * initial) : Brainfuck_Base(initial) {
-            ;
-        }
-
         size_t run(const void * code, char input[256], char output[256], size_t max) {
             const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
             if(validate(code_ref) == true)
@@ -99,7 +95,3 @@ class Brainfuck : public Brainfuck_Base {
             return max;
         }
 };
-
-Engine * create_brainfuck(char * initial) {
-    return new Brainfuck(initial);
-}

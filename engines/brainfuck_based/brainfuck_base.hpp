@@ -1,18 +1,14 @@
+#pragma once
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <iostream>
-#include "../engine.hpp"
 
 class Brainfuck_Base : public Engine {
     private:
-        std::string initial;
+        std::string initial = "+";
 
     public:
-        Brainfuck_Base(char * initial) {
-            this->initial = (initial == NULL) ? std::string("+") : std::string(initial);
-        }
-
         void * ancestor_prog() {
             return new std::string(initial);
         }

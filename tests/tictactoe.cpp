@@ -1,13 +1,12 @@
-#include "test.hpp"
 #include <string.h>
 #include <iostream>
 
-#define MAX_RUNTIME 100
+#define MAX_TIC_TAC_TOE 10000000
 #define REPS 100
 
 class TicTacToe : public Test {
     private:
-        bool won(char board[256], char player) {
+        static bool won(char board[256], char player) {
             if (
                 (board[0] == player && board[1] == player && board[2] == player) ||
                 (board[3] == player && board[4] == player && board[5] == player) ||
@@ -29,7 +28,7 @@ class TicTacToe : public Test {
                 return false;
         }
 
-        bool place(char board[256], unsigned char spot, char player) {
+        static bool place(char board[256], unsigned char spot, char player) {
             if (spot >= 9)
                 return true;
             if (board[spot] == ' ') {
@@ -39,12 +38,12 @@ class TicTacToe : public Test {
             return true;
         }
 
-        unsigned long long total_runtime;
-        unsigned long long play_game(const void * code, Engine * engine, char board[256], char output[256], int empty, char player, char other) {
+        inline static size_t total_runtime;
+        static size_t play_game(const void * code, char board[256], char output[256], int empty, char player, char other) {
             alignas(256) char save_board[256];
             int total_recursive_score = 0;
 
-            for (int i = 0; i < 9 && total_runtime <= MAX_RUNTIME; i++) {
+            for (int i = 0; i < 9 && total_runtime <= MAX_TIC_TAC_TOE; i++) {
                 if (board[i] != ' ')
                     continue;
                 memcpy(save_board, board, 9);
@@ -56,7 +55,7 @@ class TicTacToe : public Test {
                 if (empty == 1)
                     continue; // aka total_score += 0
 
-                total_runtime += engine->run(code, save_board, output, MAX_RUNTIME - total_runtime);
+                total_runtime += State::engine->run(code, save_board, output, MAX_TIC_TAC_TOE - total_runtime);
                 if (place(save_board, output[0], player)) {
                     // couldn't place it, so guaranteed did not win, also guaranteed not empty
                     switch(empty) {
@@ -90,28 +89,24 @@ class TicTacToe : public Test {
                 if (won(save_board, player))
                     total_recursive_score += 0;
                 else if (empty)
-                    total_recursive_score += play_game(code, engine, save_board, output, empty - 2, player, other);
+                    total_recursive_score += play_game(code, save_board, output, empty - 2, player, other);
             }
             return total_recursive_score;
         }
     public:
-        unsigned long long score(const void * code, Engine * engine, const State * state) override {
+        size_t score(const void * code) const override {
             alignas(256) char output[256] = {0};
             alignas(256) char board[256] = "         ";
             alignas(256) char board2[256] = "         ";
-            total_runtime = engine->run(code, board, output, MAX_RUNTIME);
-            unsigned long long lost = place(board, output[0], 'X') ? 384 : play_game(code, engine, board, output, 8, 'X', 'O');
-            lost += play_game(code, engine, board2, output, 9, 'O', 'X');
+            State::engine->run(code, board, output, MAX_TIC_TAC_TOE);
+            size_t lost = place(board, output[0], 'X') ? 384 : play_game(code, board, output, 8, 'X', 'O');
+            lost += play_game(code, board2, output, 9, 'O', 'X');
 
-            if (total_runtime >= MAX_RUNTIME)
-                return MAX_RUNTIME * 50;
+            if (total_runtime >= MAX_TIC_TAC_TOE)
+                return MAX_TIC_TAC_TOE * 50;
             else if (lost)
-                return lost * 50 + engine->size(code);
+                return lost * 50 + State::engine->size(code);
             else
                 return 0;
         }
 };
-
-Test * create_tictactoe() {
-    return new TicTacToe();
-}
