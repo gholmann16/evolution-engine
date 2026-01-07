@@ -29,6 +29,7 @@ void help() {
     puts("-f, --famers\tSets the number of \"Hall of Famers\", or old programs that new ones compare to for repetition checks, and fighting for some tests.");
     puts("-r, --randomness\tSets the default randomness value for evolution (higher is less random, but also more allowed repeat generations)");
     puts("-s, --seed\t\tSets the seed for a generation. Only used for debug purposes.");
+    puts("-o, --output\t\tSets the output file for the span of score data.");
 }
 
 void list() {
@@ -104,6 +105,10 @@ int main(int argc, char * argv[]) {
             case hash("-s"):
             case hash("--seed"):
                 sscanf(argv[++i], "%zu", &State::seed);
+                break;
+            case hash("-o"):
+            case hash("--output"):
+                State::output = argv[++i];
                 break;
             default:
                 printf("%s not a valid argument, maybe you forgot to preface it?\n", argv[i]);

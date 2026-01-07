@@ -10,16 +10,11 @@ class Squarelite : public Evolver {
     public:
         void evolve() const {
             calc_square();
-            // Evolve from winning pool. Keep the winner around so you never regress (agamogenesis) and reset
-            for (size_t winner = 0; winner < square; winner++)
-                for (size_t grandchild = 1; grandchild < square; grandchild++)
-                    State::engine->evolve(State::children[winner].code, State::children[grandchild * square + winner].code, State::def_rand - State::repetitions);
+            Standard::evolve(square);
         }
 
         void score_all() const {
-            // no reason to re-test the winners since we're not changing them
-            for (size_t i = square; i < State::total_creatures; i++)
-                State::children[i].score = State::test->score(State::children[i].code);
+            Standard::score_all(square);
         }
 
         void sort() const {

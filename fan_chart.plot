@@ -1,9 +1,9 @@
 set title "Distribution of scores over generations"
 set xlabel "# of generations"
 set ylabel "Score"
-plot "data.txt" using 1:12:20 with filledcurves lc rgb "grey50" title "10-90th range", \
-     "data.txt" using 1:16 with lines lc "red" lw 2 title "Median (50th)", \
-     "data.txt" using 1:30 with lines lc "green" lw 2 title "Best (0th %)"
+plot ARG1 using 1:12:20 with filledcurves lc rgb "grey50" title "10-90th range", \
+     ARG1 using 1:16 with lines lc "red" lw 2 title "Median (50th)", \
+     ARG1 using 1:30 with lines lc "green" lw 2 title "Best (0th %)"
 set term qt
 
 while (1) {

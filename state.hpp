@@ -75,4 +75,6 @@ namespace State {
 
     inline size_t repetitions = 0;
     inline size_t runs = 0;
+
+    inline const char * output = "data.txt";
 }

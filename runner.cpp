@@ -80,7 +80,7 @@ int runner() {
     }
 
     // Clear past data
-    std::ofstream ofs("data.txt", std::ofstream::out | std::ofstream::trunc);
+    std::ofstream ofs(State::output, std::ofstream::out | std::ofstream::trunc);
     ofs.close();
 
     while (running && State::runs < EXECUTIONS) {
@@ -91,7 +91,7 @@ int runner() {
         time_func(&Evolver::score_all, "scoring");
         time_func(&Evolver::sort, "sorting");
 
-        std::ofstream file("data.txt", std::ios::app);
+        std::ofstream file(State::output, std::ios::app);
 
         State::runs++;
         file << State::runs;
