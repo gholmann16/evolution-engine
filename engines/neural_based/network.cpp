@@ -10,6 +10,7 @@
 
 class Network : public Engine {
     private:
+        size_t fires;
         struct Synapse random_synapse(float limit) {
             return Synapse {
                 .input = static_cast<unsigned short>(rand() % 247),
@@ -35,6 +36,7 @@ class Network : public Engine {
                         neuron[outputs[synapse]] += weights[synapse];
                     }
                     neuron[i] = THRESHOLD - 1.0;
+                    fires += brain->tail[i] - brain->head[i];
                 }
             }
         }
@@ -128,6 +130,7 @@ class Network : public Engine {
         }
 
         size_t run(const void * code, char input[256], char output[256], size_t max) override {
+            fires = 0;
             const struct Brain * brain = reinterpret_cast<const struct Brain *>(code);
             char options[3] = {' ', 'O', 'X'};
             float neuron[256] = {0};
@@ -157,7 +160,7 @@ class Network : public Engine {
             }
 
             output[0] = best - 247;
-            return 0;
+            return fires;
         }
 
         bool equal(const void * first, const void * second) override {

@@ -10,7 +10,8 @@ namespace Standard {
         // only need to score the new creatures
         for (size_t i = mod; i < State::total_creatures; i++) {
             State::children[i].score = State::test->score(State::children[i].code);
-            printf("%zu\t", State::children[i].score);
+            if (State::verbose)
+                printf("%zu\t", State::children[i].score);
         }
     }
 }

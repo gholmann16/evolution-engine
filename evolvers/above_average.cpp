@@ -5,7 +5,7 @@ class Above_Average : public Evolver {
         }
 
         void score_all() const {
-            Standard::score_all(State::total_creatures / 2 - State::repetitions * State::total_creatures / (State::def_rand - 50));
+            Standard::score_all(State::total_creatures / 2 - State::repetitions * State::total_creatures / 2 / (State::def_rand - 50));
         }
 
         void sort() const {

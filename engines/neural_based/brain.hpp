@@ -9,7 +9,7 @@ struct Synapse {
 };
 
 #define SIZE 256
-#define SYNAPSES 10
+#define SYNAPSES 5
 
 class Brain {
     private:
@@ -25,9 +25,9 @@ class Brain {
         size_t size;
 
         Brain() {
-            weights = (float *)malloc(sizeof(float) * 3000);
-            outputs = (unsigned short *)malloc(sizeof(unsigned short) * 3000);
-            capacity = 3000;
+            weights = (float *)malloc(sizeof(float) * 1500);
+            outputs = (unsigned short *)malloc(sizeof(unsigned short) * 1500);
+            capacity = 1500;
             size = 0;
 
             for (int i = 0; i <= SIZE; i++) {

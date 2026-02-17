@@ -93,19 +93,29 @@ class TicTacToe : public Test {
             }
             return total_recursive_score;
         }
+
+        static void first_turn(const void * code, char board[256], char output[256]) {
+            total_runtime = State::engine->run(code, board, output, MAX_TIC_TAC_TOE);
+        }
+
     public:
         size_t score(const void * code) const override {
             alignas(256) char output[256] = {0};
             alignas(256) char board[256] = "         ";
             alignas(256) char board2[256] = "         ";
-            State::engine->run(code, board, output, MAX_TIC_TAC_TOE);
+            first_turn(code, board, output);
+            // printf("total_runtime = %zu\n", total_runtime);
             size_t lost = place(board, output[0], 'X') ? 384 : play_game(code, board, output, 8, 'X', 'O');
+            // printf("total_runtime = %zu\n", total_runtime);
             lost += play_game(code, board2, output, 9, 'O', 'X');
 
+            if (State::verbose)
+                printf("(%zu)\t", lost);
+            // printf("total_runtime = %zu\n", total_runtime);
             if (total_runtime >= MAX_TIC_TAC_TOE)
                 return MAX_TIC_TAC_TOE * 50;
             else if (lost)
-                return lost * 50 + State::engine->size(code);
+                return lost * 1000 + total_runtime;
             else
                 return 0;
         }
