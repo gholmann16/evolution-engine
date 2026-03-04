@@ -7,12 +7,12 @@ int main(int argc, char * argv[]) {
     }
 
     FILE * file = fopen(argv[1], "r");
-    unsigned char input, output;
+    unsigned short input, output;
     float multiplier;
 
     // uses graphviz to output https://dreampuf.github.io/GraphvizOnline/
-    while (fscanf(file, "{%hhu, %hhu, %f},\n", &input, &output, &multiplier) == 3) {
-        printf("%hhu -> %hhu [color=\"%s\", penwidth=%f, label=\"%f\"];\n", input, output, (multiplier > 0) ? "green" : "red", fabs(multiplier), multiplier);
+    while (fscanf(file, "{%hu, %hu, %f},\n", &input, &output, &multiplier) == 3) {
+        printf("%hu -> %hu [color=\"%s\", penwidth=%f, label=\"%f\"];\n", input, output, (multiplier > 0) ? "green" : "red", fabs(multiplier), multiplier);
     }
 
     fclose(file);

@@ -1,6 +1,8 @@
+#pragma once
 #include <vector>
 #include <cstring>
 #include <cstdlib>
+#include <format>
 
 struct Synapse {
     unsigned short input;
@@ -8,8 +10,14 @@ struct Synapse {
     float multiplier;
 };
 
-#define SIZE 256
+// must be 768 or above
+#define SIZE 2048
 #define SYNAPSES 5
+#define CAPACITY SIZE * SYNAPSES * 2
+#define INPUT_NEURONS 512
+#define EXCLUDING (SIZE - INPUT_NEURONS)
+#define THRESHOLD 0.7f
+#define LEAK 0.9f
 
 class Brain {
     private:
@@ -25,9 +33,9 @@ class Brain {
         size_t size;
 
         Brain() {
-            weights = (float *)malloc(sizeof(float) * 1500);
-            outputs = (unsigned short *)malloc(sizeof(unsigned short) * 1500);
-            capacity = 1500;
+            weights = (float *)malloc(sizeof(float) * CAPACITY);
+            outputs = (unsigned short *)malloc(sizeof(unsigned short) * CAPACITY);
+            capacity = CAPACITY;
             size = 0;
 
             for (int i = 0; i <= SIZE; i++) {
@@ -36,6 +44,19 @@ class Brain {
             }
 
             tail[SIZE] = -1;
+
+            for (int i = 0; i < INPUT_NEURONS; i++) {
+                add_synapse({
+                    .input = static_cast<unsigned short>(i),
+                    .output = static_cast<unsigned short>(i + INPUT_NEURONS),
+                    .multiplier = 1.0,
+                });
+                add_synapse({
+                    .input = static_cast<unsigned short>(i + INPUT_NEURONS),
+                    .output = static_cast<unsigned short>(EXCLUDING + i),
+                    .multiplier = 1.0,
+                });
+            }
         }
 
         ~Brain() {
@@ -89,6 +110,7 @@ class Brain {
             for (int i = 0; i <= SIZE; i++) {
                 tail[i] = head[i];
             }
+            tail[SIZE] = -1;
         }
 
         class Iterator {
@@ -137,5 +159,107 @@ class Brain {
 
         Iterator end() const {
             return Iterator(this, SIZE, 0);
+        }
+};
+
+class BrainWrapper : public Engine {
+    protected:
+        size_t fire(float neuron[SIZE], bool to_fire[SIZE], const struct Brain * brain) {
+            const float* __restrict weights = brain->weights;
+            const unsigned short* __restrict outputs = brain->outputs;
+            size_t fires = 0;
+
+            for (int i = 0; i <= EXCLUDING; i++) {
+                if (to_fire[i]) {
+                    for (int synapse = brain->head[i]; synapse < brain->tail[i]; synapse++) {
+                        // printf("firing %d into %d with %f\t", i, outputs[synapse], weights[synapse]);
+                        neuron[outputs[synapse]] += weights[synapse];
+                    }
+                    neuron[i] = THRESHOLD - 1.0;
+                    fires += brain->tail[i] - brain->head[i];
+                }
+            }
+            return fires;
+        }
+
+        void leak(float neuron[SIZE], bool to_fire[SIZE]) {
+            for (int i = INPUT_NEURONS; i < SIZE; i++) {
+                neuron[i] *= LEAK;
+                to_fire[i] = neuron[i] >= THRESHOLD;
+                // printf("%d: fire set to %s because %f is %s %f\t", i, to_fire[i] ? "true" : "false", neuron[i], to_fire[i] ? "greater" : "less than", THRESHOLD);
+            }
+        }
+
+        void noise(float neuron[SIZE]) {
+            return;
+            for (int i = 0; i < SIZE; i++) {
+                neuron[i] += -0.05 + ((float)rand()) / RAND_MAX * (0.05 - -0.05);
+            }
+        }
+
+        struct Synapse random_synapse(float limit) {
+            return Synapse {
+                .input = static_cast<unsigned short>(rand() % EXCLUDING),
+                .output = static_cast<unsigned short>(rand() % EXCLUDING + INPUT_NEURONS),
+                .multiplier = -limit + ((float)rand()) / RAND_MAX * (limit - -limit),
+            };
+        }
+
+    public:
+        void * ancestor_prog() override {
+            return new Brain();
+        }
+
+        std::string debug(const void * code) override {
+            const struct Brain * brain = reinterpret_cast<const struct Brain *>(code);
+            std::string output;
+            for (Synapse napse : *brain) {
+                output += std::format("{{{}, {}, {:.9g}}},\n", napse.input, napse.output, napse.multiplier);
+            }
+            return output;
+        }
+
+        std::string compile(const void * code) override {
+            return NULL;
+        }
+
+        bool equal(const void * first, const void * second) override {
+            const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(first);
+            const struct Brain * brain2 = reinterpret_cast<const struct Brain *>(second);
+            int neuron;
+
+            /*
+             * Can't use iterator cause there's two
+             * Check synapse count discrepancies first because it's faster
+             * Reverse order because input neurons are standardized at the beginning
+             */
+            for (neuron = SIZE - 1; neuron >= 0; neuron--) {
+                if (brain1->tail[neuron] - brain1->head[neuron] != brain2->tail[neuron] - brain2->head[neuron]) {
+                    return false;
+                }
+            }
+
+            for (neuron = SIZE - 1; neuron >= 0; neuron--) {
+                for (int synapse = 0; synapse < brain1->tail[neuron] - brain1->head[neuron]; synapse++) {
+                    if (brain1->outputs[brain1->head[neuron] + synapse] != brain2->outputs[brain2->head[neuron] + synapse]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        size_t size(const void * code) {
+            const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(code);
+            return brain1->size;
+        }
+
+        void copy_into(const void * parent, void * child) {
+            const struct Brain * brain1 = reinterpret_cast<const struct Brain *>(parent);
+            struct Brain * brain2 = reinterpret_cast<struct Brain *>(child);
+            brain2->clear();
+            for (Synapse napse : *brain1) {
+                brain2->add_synapse(napse);
+            }
         }
 };

@@ -115,7 +115,7 @@ class TicTacToe : public Test {
             if (total_runtime >= MAX_TIC_TAC_TOE)
                 return MAX_TIC_TAC_TOE * 50;
             else if (lost)
-                return lost * 1000 + total_runtime;
+                return lost * 10000 + State::engine->size(code);
             else
                 return 0;
         }

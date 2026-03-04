@@ -17,7 +17,7 @@ tests.o: tests/tests.cpp tests/crc8.cpp tests/output.cpp tests/tic_off.cpp tests
 evolvers.o: evolvers/evolvers.cpp evolvers/above_average.cpp evolvers/squarelite.cpp
 	g++ $(CFLAGS) evolvers/evolvers.cpp
 
-engines.o: engines/engines.cpp engines/brainfuck_based/assembler.cpp engines/brainfuck_based/brainfuck.cpp engines/neural_based/network.cpp
+engines.o: engines/engines.cpp engines/brainfuck_based/assembler.cpp engines/brainfuck_based/brainfuck.cpp engines/brainfuck_based/brainfuck_base.hpp engines/neural_based/network.cpp engines/neural_based/brain.hpp
 	g++ $(CFLAGS) engines/engines.cpp
 
 cli.o: cli.cpp

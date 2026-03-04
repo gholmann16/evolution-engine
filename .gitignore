@@ -11,3 +11,4 @@ crcbf.h
 *.out
 data.txt
 fit.log
+graph.txt

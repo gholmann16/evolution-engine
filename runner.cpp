@@ -38,7 +38,6 @@ bool cli_interpret() {
     double time_taken = (clock() - last) / CLOCKS_PER_SEC;
     last = clock();
     average = (average * (State::runs - 1) + time_taken) / State::runs;
-    std::cout << State::engine->debug(State::children[0].code) << std::endl;
     printf("Winner of generation %zu won with a score of %zu, size %zu, (%zu previously wins) (seed is %zu). Time used %lf (average is %lf).\n", 
         State::runs, State::children[0].score, State::engine->size(State::children[0].code), State::repetitions, State::seed, time_taken, average
     );
@@ -101,6 +100,9 @@ int runner() {
         }
         file << "\n";
         file.close();
+
+        std::ofstream graph_out("graph.txt");
+        graph_out << State::engine->debug(State::children[0].code) << std::endl;
 
         if (cli_interpret() == false)
             break;

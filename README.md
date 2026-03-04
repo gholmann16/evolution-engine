@@ -1,0 +1,1 @@
+To see the data use `gnuplot -c fan_chart.plot data.txt`
