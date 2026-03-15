@@ -67,6 +67,8 @@ class Crc8 : public Test {
             if (current_generation != State::runs)
                 prepare_answer();
 
+            State::engine->load(code);
+
             int times = 0;
             size_t runtime = 0;
             while (times < NUM_TRIES) {
@@ -74,7 +76,7 @@ class Crc8 : public Test {
                 alignas(256) char input[256];
                 memcpy(input, inputs[times], 256);
 
-                runtime += State::engine->run(code, &input[times], &output[times], LOOP_MAX - runtime);
+                runtime += State::engine->run(&input[times], &output[times], LOOP_MAX - runtime);
                 if (runtime == LOOP_MAX || expect[times][0] != output[0])
                     return LOOP_MAX * 50;
 

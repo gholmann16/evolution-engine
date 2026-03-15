@@ -7,7 +7,9 @@ class Output : public Test {
         size_t score(const void * code) const override {
             alignas(256) char empty_input[256] = {0};
             alignas(256) char output[256] = {0};
-            if (State::engine->run(code, empty_input, output, MAX_RUNTIME) == MAX_RUNTIME)
+            State::engine->load(code);
+
+            if (State::engine->run(empty_input, output, MAX_RUNTIME) == MAX_RUNTIME)
                 return MAX_RUNTIME * 50;
 
             size_t total_score = 0;

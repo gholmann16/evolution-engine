@@ -11,6 +11,13 @@ Engine * engines[] {
     new Racehorse(),
 };
 
+Engine * competitors[] {
+    new Network(),
+    new Brainfuck(),
+    new JitFuck(),
+    new Racehorse(),
+};
+
 const char * engine_names[] {
     "Network",
     "Brainfuck",
@@ -18,4 +25,4 @@ const char * engine_names[] {
     "Racehorse"
 };
 
-int num_engines = 3;
+int num_engines = sizeof(engines) / sizeof(Engine *);

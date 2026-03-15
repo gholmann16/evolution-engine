@@ -67,16 +67,11 @@ class JitFuck : public Brainfuck_Base {
             munmap(program, 4096 * 256);
         }
 
-        size_t run(const void * code, char input[256], char output[256], size_t max) {
+        void load(const void * code) {
             const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
             // clock_t begin = clock();
             int index = 0;
             int brackets = 0;
-
-            // if (code.data() == last)
-            //     goto execute;
-            // else
-            //     last = code.data();
 
             /*
             !!
@@ -110,8 +105,10 @@ class JitFuck : public Brainfuck_Base {
                         vec[brackets++] = index;
                         break;
                     case ']':
-                        if (brackets == 0)
-                            return max;
+                        if (brackets == 0) {
+                            program[0] = 0xC3;
+                            return;
+                        }
 
                         append(program, &index, end, sizeof(end));
                         int offset = vec[--brackets] - index;
@@ -124,10 +121,13 @@ class JitFuck : public Brainfuck_Base {
 
             program[index++] = 0xC3; // this is ret
 
-            if (brackets != 0)
-                return max;
+            if (brackets != 0) {
+                program[0] = 0xC3;
+                return;
+            }
+        }
 
-            // execute:
+        size_t run(char input[256], char output[256], size_t max) {
             alignas(65536) unsigned char memory[65536] = {0};
             // clock_t end = clock();
             // printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
@@ -150,6 +150,5 @@ class JitFuck : public Brainfuck_Base {
             // printf("here, looptime %ld %ld, %p, %d\n", prog->runtime, difference, input, strlen(input));
             // printf("ret value %d, char %c, hex 0x%02x\n", al, al, al);
             // printf("exectution time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
-
         }
 };

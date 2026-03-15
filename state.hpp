@@ -11,9 +11,12 @@ struct Program {
 class Engine {
     public:
         virtual ~Engine() = default;
+        bool trainable = false;
 
         // input read only, output should be non freeable memory, too many allocs otherwise. Return looptime/runtime
-        virtual size_t run(const void * code, char input[256], char output[256], size_t max) = 0;
+        // virtual size_t train(void * code, char input[256], char output[256], size_t max) = 0;
+        virtual void load(const void * code) = 0;
+        virtual size_t run(char input[256], char output[256], size_t max) = 0;
 
         // Evolving
         virtual void * ancestor_prog() = 0;
@@ -28,6 +31,7 @@ class Engine {
 };
 
 extern Engine * engines[];
+extern Engine * competitors[];
 extern const char * engine_names[];
 extern int num_engines;
 
@@ -67,6 +71,7 @@ namespace State {
 
     inline Test * test = nullptr;
     inline Engine * engine = nullptr;
+    inline Engine * comp = nullptr;
     inline Evolver * evolver = nullptr;
 
     inline size_t def_rand = 250;

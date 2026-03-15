@@ -26,10 +26,16 @@ class Brainfuck : public Brainfuck_Base {
 
             return false;
         }
+
+        const std::string * cp;
+        bool invalid;
     public:
-        size_t run(const void * code, char input[256], char output[256], size_t max) {
-            const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
-            if(validate(code_ref) == true)
+        void load(const void * code) {
+            cp = reinterpret_cast<const std::string*>(code);
+            invalid = validate(*cp);
+        }
+        size_t run(char input[256], char output[256], size_t max) {
+            if(invalid == true)
                 return max; // Punishment for failing
 
             unsigned char memory[65536] = {0};
@@ -42,8 +48,8 @@ class Brainfuck : public Brainfuck_Base {
             size_t runtime = 0;
             int brackets;
 
-            for (size_t x = 0; x < code_ref.size(); x++) {
-                switch(code_ref[x]) {
+            for (size_t x = 0; x < cp->size(); x++) {
+                switch((*cp)[x]) {
                     case '+': 
                         memory[location]++;
                         break;
@@ -61,9 +67,9 @@ class Brainfuck : public Brainfuck_Base {
                         brackets = 1;
                         while (brackets) {
                             x++;
-                            if (code_ref[x] == '[')
+                            if ((*cp)[x] == '[')
                                 brackets++;
-                            else if (code_ref[x] == ']')
+                            else if ((*cp)[x] == ']')
                                 brackets--;
                         }
                         // Could do x-- and break, or just continue
@@ -86,9 +92,9 @@ class Brainfuck : public Brainfuck_Base {
                         break;
                     default:
                         puts("Unknown brainfuck command detected");
-                        printf("chracter hex: 0x%x\n", code_ref[x]);
+                        printf("chracter hex: 0x%x\n", (*cp)[x]);
                         puts("Code:");
-                        std::cout << code_ref << std::endl;
+                        std::cout << (*cp) << std::endl;
                         exit(-1);
                 }
             }

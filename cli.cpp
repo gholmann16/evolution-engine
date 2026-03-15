@@ -77,6 +77,7 @@ int main(int argc, char * argv[]) {
             case hash("-n"):
             case hash("--engine"):
                 State::engine = engines[pos(engine_names, argv[++i], num_engines)];
+                State::comp = competitors[pos(engine_names, argv[i], num_engines)];
                 break;
             case hash("-e"):
             case hash("--evolver"):
@@ -135,6 +136,9 @@ int main(int argc, char * argv[]) {
 
     runner();
 
+    for (size_t ancestor = 0; ancestor < State::total_creatures; ancestor++) {
+        delete static_cast<std::string*>(State::children[ancestor].code);
+    }
     delete[] State::children;
     free(State::hall_of_fame);
 

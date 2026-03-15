@@ -55,19 +55,19 @@ class Tic_Off : public Test {
         Tester is always scoring for X so we simulate that with flip()
         */ 
         // 
-        static int fight(const void * first, const void * second) {
+        static int fight(Engine * first, Engine * second) {
             alignas(256) char board[256] = "         ";
             alignas(256) char output[256];
-            if (State::engine->run(first, board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
+            if (first->run(board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
                 return -1;
             for (int i = 0; i < 4; i++) {
                 flip(board);
-                if (State::engine->run(second, board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
+                if (second->run(board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
                     return 1;
                 if (won(board))
                     return -1;
                 flip(board);
-                if (State::engine->run(first, board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
+                if (first->run(board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
                     return -1;
                 if (won(board))
                     return 1;
@@ -77,11 +77,13 @@ class Tic_Off : public Test {
 
     public:
         size_t score(const void * code) const override {
+            State::engine->load(code);
             // 100 winners of last generation, who don't play cause they already have a score
             size_t total = State::total_famers * 2;
             for (size_t i = 0; i < State::total_famers; i++) {
-                total -= fight(code, State::hall_of_fame[i]); // if first wins, subtract 1 (better)
-                total += fight(State::hall_of_fame[i], code); // if first wins, add 1 (worse)
+                State::comp->load(State::hall_of_fame[i]);
+                total -= fight(State::engine, State::comp); // if first wins, subtract 1 (better)
+                total += fight(State::comp, State::engine); // if first wins, add 1 (worse)
             }
             return 50 * total + State::engine->size(code);
         }

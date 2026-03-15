@@ -38,76 +38,60 @@ class TicTacToe : public Test {
             return true;
         }
 
+        inline static bool training_mode = false;
+
         inline static size_t total_runtime;
-        static size_t play_game(const void * code, char board[256], char output[256], int empty, char player, char other) {
+        static size_t play_game(char board[256], char output[256], int empty, char player, char other) {
             alignas(256) char save_board[256];
-            int total_recursive_score = 0;
+            size_t total_recursive_score = 0;
+            size_t games_left[] = {1, 1, 1, 2, 3, 8, 15, 48, 105};
 
             for (int i = 0; i < 9 && total_runtime <= MAX_TIC_TAC_TOE; i++) {
                 if (board[i] != ' ')
                     continue;
-                memcpy(save_board, board, 9);
+                memcpy(save_board, board, 64);
                 save_board[i] = other;
                 if (won(save_board, other)) {
-                    total_recursive_score++;
+                    total_recursive_score += games_left[empty - 1];
                     continue;
                 }
-                if (empty == 1)
-                    continue; // aka total_score += 0
 
-                total_runtime += State::engine->run(code, save_board, output, MAX_TIC_TAC_TOE - total_runtime);
+                total_runtime += State::engine->run(save_board, output, MAX_TIC_TAC_TOE - total_runtime);
                 if (place(save_board, output[0], player)) {
-                    // couldn't place it, so guaranteed did not win, also guaranteed not empty
-                    switch(empty) {
-                        case 9:
-                            total_recursive_score += 105;
-                            continue;
-                        case 8: // fucked up on the first turn, so essentially every move set starting by the second should count as lost
-                            total_recursive_score += 48;
-                            continue;
-                        case 7:
-                            total_recursive_score += 15;
-                            continue;
-                        case 6:
-                            total_recursive_score += 8;
-                            continue;
-                        case 5:
-                            total_recursive_score += 3;
-                            continue;
-                        case 4: // both games that would have ensued had this gone through are done
-                            total_recursive_score += 2;
-                            continue;
-                        case 3:
-                            total_recursive_score += 1;
-                            continue;
-                        case 2: // no games would be played, so this is a normal loss
-                            total_recursive_score += 1;
-                            continue;
-                    }
+                    total_recursive_score += games_left[empty - 1];
+                    continue;
                 }
 
                 if (won(save_board, player))
                     total_recursive_score += 0;
                 else if (empty)
-                    total_recursive_score += play_game(code, save_board, output, empty - 2, player, other);
+                    total_recursive_score += play_game(save_board, output, empty - 2, player, other);
             }
             return total_recursive_score;
         }
 
-        static void first_turn(const void * code, char board[256], char output[256]) {
-            total_runtime = State::engine->run(code, board, output, MAX_TIC_TAC_TOE);
+        static void first_turn(char board[256], char output[256]) {
+            total_runtime = State::engine->run(board, output, MAX_TIC_TAC_TOE);
         }
 
+        static void train(void * code) {
+            training_mode = true;
+
+        }
+    
+    #define LEARNING 0.05f
     public:
         size_t score(const void * code) const override {
             alignas(256) char output[256] = {0};
             alignas(256) char board[256] = "         ";
             alignas(256) char board2[256] = "         ";
-            first_turn(code, board, output);
-            // printf("total_runtime = %zu\n", total_runtime);
-            size_t lost = place(board, output[0], 'X') ? 384 : play_game(code, board, output, 8, 'X', 'O');
-            // printf("total_runtime = %zu\n", total_runtime);
-            lost += play_game(code, board2, output, 9, 'O', 'X');
+
+            State::engine->load(code);
+            first_turn(board, output);
+            size_t lost = place(board, output[0], 'X') ? 384 : play_game(board, output, 8, 'X', 'O');
+            if (State::verbose)
+                printf("(%zu)\t", lost);
+            lost += play_game(board2, output, 9, 'O', 'X');
 
             if (State::verbose)
                 printf("(%zu)\t", lost);
@@ -115,7 +99,7 @@ class TicTacToe : public Test {
             if (total_runtime >= MAX_TIC_TAC_TOE)
                 return MAX_TIC_TAC_TOE * 50;
             else if (lost)
-                return lost * 10000 + State::engine->size(code);
+                return lost * 10000 + total_runtime + State::engine->size(code) * 10;
             else
                 return 0;
         }
