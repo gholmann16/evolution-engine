@@ -2,6 +2,7 @@
 #include <time.h>
 #include <string.h>
 #include <ranges>
+#include <cstdint>
 
 constexpr uint32_t hash(const char * str) {
     uint32_t hash = 0x811c9dc5;

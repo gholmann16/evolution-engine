@@ -1,0 +1,42 @@
+struct alignas(256) AlignedBuffer {
+    char data[256];
+};
+
+class Add : public Test {
+    private:
+        inline static AlignedBuffer inputs[10];
+        inline static unsigned char sum[10];
+        inline static size_t current_generation = -1;
+
+        static void prepare_answer() {
+            current_generation = State::runs;
+            for (int i = 0; i < 10; i++) {
+                inputs[i].data[0] = rand() % 256;
+                inputs[i].data[1] = rand() % 256;
+                sum[i] = (unsigned char)(inputs[i].data[0] + (unsigned char)inputs[i].data[1]);
+            }
+        }
+
+    public:
+        size_t score(const void * code) const override {
+            if (current_generation != State::runs)
+            prepare_answer();
+
+            State::engine->load(code);
+
+            size_t runtime = 0;
+            size_t error = 0;
+
+            for (int i = 0; i < 10; i++) {
+                alignas(256) char output[256] = {0};
+
+                runtime += State::engine->run(inputs[i].data, output, LOOP_MAX - runtime);
+                if (runtime == LOOP_MAX)
+                    return LOOP_MAX * 50;
+
+                error += abs(sum[i] - (unsigned char)output[0]);
+            }
+
+            return runtime + State::engine->size(code) * 5 + error;
+        }
+};

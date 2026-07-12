@@ -7,6 +7,9 @@
 class Brainfuck_Base : public Engine {
     private:
         std::string initial = "+";
+    
+    protected:
+        char allowed_chars[256] = "+-<>[],.";
 
     public:
         void * ancestor_prog() {
@@ -17,7 +20,6 @@ class Brainfuck_Base : public Engine {
             const std::string& parent_ref = *reinterpret_cast<const std::string*>(parent);
             std::string& child_ref = *reinterpret_cast<std::string*>(child);
 
-            const char * allowed_chars = "+-<>[].,";
             int len = strlen(allowed_chars);
             child_ref.clear();
 

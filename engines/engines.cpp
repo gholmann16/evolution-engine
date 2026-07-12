@@ -3,12 +3,14 @@
 #include "neural_based/racehorse.cpp"
 #include "brainfuck_based/brainfuck.cpp"
 #include "brainfuck_based/assembler.cpp"
+#include "brainfuck_based/skipfuck.cpp"
 
 Engine * engines[] {
     new Network(),
     new Brainfuck(),
     new JitFuck(),
     new Racehorse(),
+    new Skipfuck(),
 };
 
 Engine * competitors[] {
@@ -16,13 +18,15 @@ Engine * competitors[] {
     new Brainfuck(),
     new JitFuck(),
     new Racehorse(),
+    new Skipfuck(),
 };
 
 const char * engine_names[] {
     "Network",
     "Brainfuck",
     "JitFuck",
-    "Racehorse"
+    "Racehorse",
+    "Skipfuck",
 };
 
 int num_engines = sizeof(engines) / sizeof(Engine *);

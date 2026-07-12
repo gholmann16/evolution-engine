@@ -3,12 +3,14 @@
 #include "output.cpp"
 #include "tic_off.cpp"
 #include "tictactoe.cpp"
+#include "add.cpp"
 
 Test * tests[] = {
     new Crc8(),
     new Output(),
     new Tic_Off(),
     new TicTacToe(),
+    new Add(),
 };
 
 const char * test_names[] = {
@@ -16,6 +18,7 @@ const char * test_names[] = {
     "Output",
     "Tic_Off",
     "TicTacToe",
+    "Add",
 };
 
-int num_tests = 4;
+int num_tests = sizeof(tests) / sizeof(Test *);
