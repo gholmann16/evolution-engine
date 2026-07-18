@@ -24,4 +24,12 @@ class Output : public Test {
 
             return total_score ? total_score * 50 + State::engine->size(code) : 0;
         }
+
+        std::string display(const void * code) const override {
+            alignas(256) char empty_input[256] = {0};
+            alignas(256) char output[256] = {0};
+            State::engine->load(code);
+            State::engine->run(empty_input, output, MAX_RUNTIME);
+            return std::string(output);
+        }
 };

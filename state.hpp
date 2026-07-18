@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <memory>
 #include <map>
+#include <string>
 
 struct Program {
     void * code;
@@ -39,6 +40,9 @@ class Test {
     public:
         virtual ~Test() = default;
         virtual size_t score(const void * code) const = 0;
+        // Optional human-readable rendering of what this code produces (e.g.
+        // the raw output string for Output). Empty string means "not shown".
+        virtual std::string display(const void * code) const { return ""; }
 };
 
 extern Test * tests[];

@@ -4,10 +4,8 @@ LDLIBS := -flto -g
 monolith.out: cli.o runner.o engines.o tests.o evolvers.o
 	g++ $(LDLIBS) cli.o runner.o engines.o tests.o evolvers.o -o monolith.out
 
-gui: CFLAGS += `pkg-config --cflags libadwaita-1`
-gui: LDLIBS += `pkg-config --libs libadwaita-1`
-gui: main.o evolver.o brainfuck.o generator.o
-	gcc $(LDLIBS) main.o evolver.o brainfuck.o generator.o -o gui
+gui.out: gui.o engines.o tests.o evolvers.o
+	g++ $(LDLIBS) `pkg-config --libs gtk4 libadwaita-1` gui.o engines.o tests.o evolvers.o -o gui.out
 
 # Objects
 
@@ -26,8 +24,9 @@ cli.o: cli.cpp
 runner.o: runner.cpp
 	g++ $(CFLAGS) runner.cpp
 
-main.o: main.c
-	gcc $(CFLAGS) main.c 
+gui.o: CFLAGS += `pkg-config --cflags gtk4 libadwaita-1`
+gui.o: gui.cpp
+	g++ $(CFLAGS) gui.cpp
 
 clean:
 	rm *.o
