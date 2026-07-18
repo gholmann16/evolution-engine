@@ -5,7 +5,7 @@
 
 
 int main() {
-    State::engine = engines[0];
+    State::engine = make_engine(0);
     Test * tester = tests[3];
     void * code = State::engine->ancestor_prog();
 

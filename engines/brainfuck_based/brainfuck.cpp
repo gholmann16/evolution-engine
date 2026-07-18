@@ -98,6 +98,6 @@ class Brainfuck : public Brainfuck_Base {
                         exit(-1);
                 }
             }
-            return max;
+            return runtime;
         }
 };

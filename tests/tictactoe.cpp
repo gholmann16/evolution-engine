@@ -40,7 +40,11 @@ class TicTacToe : public Test {
 
         inline static bool training_mode = false;
 
-        inline static size_t total_runtime;
+        // thread_local: mutated on every score() call (reset then accumulated
+        // across the recursive play_game() calls within that one call), so
+        // concurrent score() calls from the scoring thread pool need their
+        // own counter, not one shared across threads.
+        inline static thread_local size_t total_runtime;
         static size_t play_game(char board[256], char output[256], int empty, char player, char other) {
             alignas(256) char save_board[256];
             size_t total_recursive_score = 0;

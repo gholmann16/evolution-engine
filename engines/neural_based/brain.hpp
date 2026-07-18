@@ -31,6 +31,23 @@ struct LiveSynapse {
 #define EQUAL_BAR 0.90f           // >= 90% shared wiring counts as "the same creature"
 #define ANCESTOR_SYNAPSES (SIZE * 2)
 #define RUNS 30
+#define VISIBLE_OUTPUT_BYTES 16   // for now: debug/visualization tools only care about the first 16 output bytes (128 bits)
+
+// Debug/visualization only -- one sample of a kept neuron's potential after
+// a propagation round, and one synapse that fired that round.
+struct NeuronSample {
+    unsigned short neuron;
+    float value;
+};
+struct FiredSynapse {
+    unsigned short input;
+    unsigned short output;
+    float multiplier;   // sign tells a viewer excitatory (+) vs inhibitory (-)
+};
+struct TraceRound {
+    std::vector<NeuronSample> neurons;
+    std::vector<FiredSynapse> fired;
+};
 
 static_assert(SIZE >= INPUT_NEURONS + OUTPUT_NEURONS, "no room for hidden neurons");
 static_assert(SIZE <= 65536, "neuron indices must fit unsigned short");
@@ -290,6 +307,115 @@ class Brain : public Engine {
                 output += std::format("{{{}, {}, {:.9g}}},\n", data[i].input, data[i].output, data[i].multiplier);
             }
             return output;
+        }
+
+        // Backward-reachability slice from the first VISIBLE_OUTPUT_BYTES
+        // output bytes: kept[n] means a synapse can still influence one of
+        // those bytes, directly or through some chain of other synapses.
+        // Anything not marked is dead wiring as far as that output slice is
+        // concerned (an unreachable output neuron, or a hidden neuron whose
+        // every downstream path dead-ends). Repeated full passes rather than
+        // a real adjacency-list BFS -- genomes here are thousands of
+        // synapses, not millions, and this only runs on-demand for one
+        // genome at a time (debug view / node view), never in the hot loop.
+        std::vector<bool> reachable_from_outputs(const Synapse * data, size_t count, int visible_bytes) {
+            std::vector<bool> kept(SIZE, false);
+            int visible_neurons = std::min(visible_bytes * 8, OUTPUT_NEURONS);
+            for (int i = 0; i < visible_neurons; i++)
+                kept[EXCLUDING + i] = true;
+
+            bool changed = true;
+            while (changed) {
+                changed = false;
+                for (size_t i = 0; i < count; i++) {
+                    if (kept[data[i].output] && !kept[data[i].input]) {
+                        kept[data[i].input] = true;
+                        changed = true;
+                    }
+                }
+            }
+            return kept;
+        }
+
+        // The structural pruned edge list (same "kept" filter as clean_debug),
+        // for callers that want actual Synapse data instead of formatted
+        // text -- e.g. a GUI node view drawing the static wiring once, then
+        // overlaying per-round firing from trace() on top of it.
+        std::vector<Synapse> clean_synapses(const void * code) {
+            const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
+            size_t count = code_ref.size() / sizeof(Synapse);
+            const Synapse * data = reinterpret_cast<const Synapse*>(code_ref.data());
+            std::vector<bool> kept = reachable_from_outputs(data, count, VISIBLE_OUTPUT_BYTES);
+
+            std::vector<Synapse> output;
+            for (size_t i = 0; i < count; i++)
+                if (kept[data[i].output])
+                    output.push_back(data[i]);
+            return output;
+        }
+
+        std::string clean_debug(const void * code) override {
+            std::string output;
+            for (const Synapse & s : clean_synapses(code))
+                output += std::format("{{{}, {}, {:.9g}}},\n", s.input, s.output, s.multiplier);
+            return output;
+        }
+
+        // Debug/visualization only: runs the same propagation as run(), but
+        // records the potential of every kept neuron and which kept
+        // synapses fired, one entry per round -- so a GUI can play back
+        // "how it comes up with ideas" instead of only seeing the final
+        // output.
+        std::vector<TraceRound> trace(const void * code, char input[256]) {
+            load(code);
+            const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
+            size_t count = code_ref.size() / sizeof(Synapse);
+            const Synapse * data = reinterpret_cast<const Synapse*>(code_ref.data());
+            std::vector<bool> kept = reachable_from_outputs(data, count, VISIBLE_OUTPUT_BYTES);
+
+            float neuron[SIZE] = {0};
+            bool to_fire[SIZE] = {0};
+            for (int position = 0; position < 256; position++) {
+                unsigned char byte = (unsigned char)input[position];
+                for (int bit = 0; bit < 8; bit++)
+                    to_fire[position * 8 + bit] = (byte >> (7 - bit)) & 1;
+            }
+
+            std::vector<TraceRound> rounds;
+            rounds.reserve(RUNS + 1);
+
+            // Round 0 is the resting state before any propagation -- nothing
+            // fired, every kept neuron at 0 -- so playback has a true start
+            // to open (and rewind) on instead of beginning mid-execution.
+            TraceRound initial;
+            for (int n = 0; n < SIZE; n++)
+                if (kept[n])
+                    initial.neurons.push_back({(unsigned short)n, neuron[n]});
+            rounds.push_back(std::move(initial));
+
+            for (int r = 0; r < RUNS; r++) {
+                leak(neuron, to_fire);
+                noise(neuron);
+
+                TraceRound round;
+                for (int i = 0; i < EXCLUDING; i++) {
+                    if (to_fire[i] && kept[i]) {
+                        const int h = head[i], t = tail[i];
+                        for (int s = h; s < t; s++)
+                            if (kept[synapses[s].output])
+                                round.fired.push_back({(unsigned short)i, synapses[s].output, synapses[s].weight});
+                    }
+                }
+
+                fire(neuron, to_fire);
+
+                for (int n = 0; n < SIZE; n++)
+                    if (kept[n])
+                        round.neurons.push_back({(unsigned short)n, neuron[n]});
+
+                rounds.push_back(std::move(round));
+            }
+            return rounds;
         }
 
         std::string compile(const void * code) override {

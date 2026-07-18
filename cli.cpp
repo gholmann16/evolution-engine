@@ -76,10 +76,12 @@ int main(int argc, char * argv[]) {
                 list();
                 return 0;
             case hash("-n"):
-            case hash("--engine"):
-                State::engine = engines[pos(engine_names, argv[++i], num_engines)];
-                State::comp = competitors[pos(engine_names, argv[i], num_engines)];
+            case hash("--engine"): {
+                int idx = pos(engine_names, argv[++i], num_engines);
+                State::engine = make_engine(idx);
+                State::comp = make_engine(idx);
                 break;
+            }
             case hash("-e"):
             case hash("--evolver"):
                 State::evolver = evolvers[pos(evolver_names, argv[++i], num_evolvers)];
