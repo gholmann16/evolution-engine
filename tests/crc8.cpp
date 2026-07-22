@@ -3,7 +3,6 @@
 // Needed for little endian
 #define SWAP(x) ((x>>8) & 0xff) | ((x & 0xff)<<8)
 #define NUM_TRIES 3
-size_t LOOP_MAX = 1000000000;
 
 class Crc8 : public Test {
     private:
@@ -76,14 +75,31 @@ class Crc8 : public Test {
                 alignas(256) char input[256];
                 memcpy(input, inputs[times], 256);
 
-                runtime += State::engine->run(input, output, LOOP_MAX - runtime);
-                if (runtime == LOOP_MAX || expect[times][0] != output[0])
-                    return LOOP_MAX * 50;
+                runtime += State::engine->run(input, output, State::max_runtime - runtime);
+                if (runtime == State::max_runtime || expect[times][0] != output[0])
+                    return State::max_runtime * 50;
 
                 times++;
             }
 
             return runtime + State::engine->size(code) * 5;
+        }
+
+        std::string display(const void * code) const override {
+            if (current_generation != State::runs)
+                prepare_answer();
+
+            State::engine->load(code);
+            int correct = 0;
+            for (int i = 0; i < NUM_TRIES; i++) {
+                alignas(256) char output[256] = {0};
+                alignas(256) char input[256];
+                memcpy(input, inputs[i], 256);
+                State::engine->run(input, output, State::max_runtime);
+                if (output[0] == expect[i][0])
+                    correct++;
+            }
+            return std::to_string(correct) + "/" + std::to_string(NUM_TRIES) + " correct";
         }
 
         ~Crc8() {

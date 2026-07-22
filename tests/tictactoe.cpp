@@ -1,7 +1,6 @@
 #include <string.h>
 #include <iostream>
 
-#define MAX_TIC_TAC_TOE 10000000
 #define REPS 100
 
 class TicTacToe : public Test {
@@ -50,7 +49,7 @@ class TicTacToe : public Test {
             size_t total_recursive_score = 0;
             size_t games_left[] = {1, 1, 1, 2, 3, 8, 15, 48, 105};
 
-            for (int i = 0; i < 9 && total_runtime <= MAX_TIC_TAC_TOE; i++) {
+            for (int i = 0; i < 9 && total_runtime <= State::max_runtime; i++) {
                 if (board[i] != ' ')
                     continue;
                 memcpy(save_board, board, 64);
@@ -60,7 +59,7 @@ class TicTacToe : public Test {
                     continue;
                 }
 
-                total_runtime += State::engine->run(save_board, output, MAX_TIC_TAC_TOE - total_runtime);
+                total_runtime += State::engine->run(save_board, output, State::max_runtime - total_runtime);
                 if (place(save_board, output[0], player)) {
                     total_recursive_score += games_left[empty - 1];
                     continue;
@@ -75,14 +74,33 @@ class TicTacToe : public Test {
         }
 
         static void first_turn(char board[256], char output[256]) {
-            total_runtime = State::engine->run(board, output, MAX_TIC_TAC_TOE);
+            total_runtime = State::engine->run(board, output, State::max_runtime);
         }
 
         static void train(void * code) {
             training_mode = true;
 
         }
-    
+
+        // +1 = first-mover wins, 0 = tie, -1 = second-mover wins. A concrete
+        // single-game playthrough, unlike play_game()'s exhaustive minimax
+        // search over every possible opponent line -- this is for display()
+        // only (a "wins out of games played" count), not part of the actual
+        // scoring/evolution objective.
+        static int fight(Engine * first, Engine * second) {
+            alignas(256) char board[256] = "         ";
+            alignas(256) char output[256];
+            for (int turn = 0; turn < 9; turn++) {
+                Engine * mover = (turn % 2 == 0) ? first : second;
+                char mark = (turn % 2 == 0) ? 'X' : 'O';
+                if (mover->run(board, output, State::max_runtime) == State::max_runtime || place(board, output[0], mark))
+                    return (turn % 2 == 0) ? -1 : 1;   // mover forfeited -- other side wins
+                if (won(board, mark))
+                    return (turn % 2 == 0) ? 1 : -1;
+            }
+            return 0;   // board filled with no winner
+        }
+
     #define LEARNING 0.05f
     public:
         size_t score(const void * code) const override {
@@ -100,11 +118,24 @@ class TicTacToe : public Test {
             if (State::verbose)
                 printf("(%zu)\t", lost);
             // printf("total_runtime = %zu\n", total_runtime);
-            if (total_runtime >= MAX_TIC_TAC_TOE)
-                return MAX_TIC_TAC_TOE * 50;
+            if (total_runtime >= State::max_runtime)
+                return State::max_runtime * 50;
             else if (lost)
                 return lost * 10000 + total_runtime + State::engine->size(code) * 10;
             else
                 return 0;
+        }
+
+        // Concrete games (via fight()) against the whole hall of fame,
+        // purely to report a "wins out of games played" count.
+        std::string display(const void * code) const override {
+            State::engine->load(code);
+            int wins = 0;
+            for (size_t i = 0; i < State::total_famers; i++) {
+                State::comp->load(State::hall_of_fame[i]);
+                if (fight(State::engine, State::comp) == 1) wins++;
+                if (fight(State::comp, State::engine) == -1) wins++;
+            }
+            return std::to_string(wins) + "/" + std::to_string(State::total_famers * 2) + " games won";
         }
 };

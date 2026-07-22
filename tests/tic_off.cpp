@@ -1,5 +1,3 @@
-#define MAX_TIC_OFF 100000
-
 // 1 v 1 tic tac toe
 class Tic_Off : public Test {
     private:
@@ -53,21 +51,21 @@ class Tic_Off : public Test {
         We actually need to flip each time, because if given a board state at random
         where you don't know who you are, then how are you supposed to make the right choice?
         Tester is always scoring for X so we simulate that with flip()
-        */ 
-        // 
+        */
+        //
         static int fight(Engine * first, Engine * second) {
             alignas(256) char board[256] = "         ";
             alignas(256) char output[256];
-            if (first->run(board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
+            if (first->run(board, output, State::max_runtime) == State::max_runtime || place(board, output[0]))
                 return -1;
             for (int i = 0; i < 4; i++) {
                 flip(board);
-                if (second->run(board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
+                if (second->run(board, output, State::max_runtime) == State::max_runtime || place(board, output[0]))
                     return 1;
                 if (won(board))
                     return -1;
                 flip(board);
-                if (first->run(board, output, MAX_TIC_OFF) == MAX_TIC_OFF || place(board, output[0]))
+                if (first->run(board, output, State::max_runtime) == State::max_runtime || place(board, output[0]))
                     return -1;
                 if (won(board))
                     return 1;
@@ -86,5 +84,18 @@ class Tic_Off : public Test {
                 total += fight(State::comp, State::engine); // if first wins, add 1 (worse)
             }
             return 50 * total + State::engine->size(code);
+        }
+
+        // Same fight() used for scoring, replayed against the whole hall of
+        // fame purely to report a "wins out of games played" count.
+        std::string display(const void * code) const override {
+            State::engine->load(code);
+            int wins = 0;
+            for (size_t i = 0; i < State::total_famers; i++) {
+                State::comp->load(State::hall_of_fame[i]);
+                if (fight(State::engine, State::comp) == 1) wins++;
+                if (fight(State::comp, State::engine) == -1) wins++;
+            }
+            return std::to_string(wins) + "/" + std::to_string(State::total_famers * 2) + " games won";
         }
 };

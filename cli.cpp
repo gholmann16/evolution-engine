@@ -31,6 +31,7 @@ void help() {
     puts("-r, --randomness\tSets the default randomness value for evolution (higher is less random, but also more allowed repeat generations)");
     puts("-s, --seed\t\tSets the seed for a generation. Only used for debug purposes.");
     puts("-o, --output\t\tSets the output file for the span of score data.");
+    puts("-m, --max-runtime\tSets the engine run() iteration cap every test scores against (was a separate hardcoded constant per test).");
 }
 
 void list() {
@@ -114,6 +115,10 @@ int main(int argc, char * argv[]) {
             case hash("--output"):
                 State::output = argv[++i];
                 break;
+            case hash("-m"):
+            case hash("--max-runtime"):
+                sscanf(argv[++i], "%zu", &State::max_runtime);
+                break;
             default:
                 printf("%s not a valid argument, maybe you forgot to preface it?\n", argv[i]);
                 break;
@@ -132,10 +137,12 @@ int main(int argc, char * argv[]) {
     for (size_t famer = 0; famer < State::total_famers; famer++)
         State::hall_of_fame[famer] = State::engine->ancestor_prog();
 
-    for(size_t ancestor = 0; ancestor < State::total_creatures; ancestor++) {
+    for(size_t ancestor = 0; ancestor < State::total_creatures; ancestor++)
         State::children[ancestor].code = State::engine->ancestor_prog();
-        State::children[ancestor].score = State::test->score(State::children[ancestor].code);
-    }
+    // Same worker pool every later generation's scoring uses, instead of one
+    // genome at a time on this one thread -- serially scoring a 10,000-strong
+    // neural population here could take minutes instead of seconds.
+    parallel_score(0, State::total_creatures);
 
     runner();
 

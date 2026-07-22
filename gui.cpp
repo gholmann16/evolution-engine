@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <fstream>
 #include <cmath>
+#include <cctype>
 
 // ---- GUI-only state (kept out of the State namespace on purpose: State is
 // the shared contract with the engines/tests/evolvers, this is just widgets
@@ -26,6 +27,8 @@ static GtkWidget *main_window;
 static GtkWidget *nav_view;   // AdwNavigationView: root page + pushed detail views
 static GtkWidget *engine_dropdown, *evolver_dropdown, *test_dropdown;
 static GtkWidget *seed_spin, *children_spin, *famers_spin, *randomness_spin;
+static GtkWidget *max_runtime_scale, *max_runtime_value_label;
+static GtkWidget *memory_estimate_label;
 static GtkWidget *start_button, *play_button;
 static GtkWidget *top10_list, *fame_list;
 static GtkWidget *status_label;
@@ -86,7 +89,31 @@ static std::string sanitize(const std::string &s) {
     return out;
 }
 
+// Parses whatever hex-digit characters appear in `text` into `out[256]`,
+// zero-padding the rest -- ignores everything else (spaces, separators); a
+// stray trailing nibble from an odd count of digits is just dropped rather
+// than guessed at. Shared by the Brainfuck walkthrough's and neural node
+// view's input boxes.
+static void parse_hex_input(const char *text, char out[256]) {
+    std::fill(out, out + 256, 0);
+    size_t out_pos = 0;
+    int high_nibble = -1;
+    for (const char *p = text; *p && out_pos < 256; p++) {
+        if (!isxdigit((unsigned char)*p)) continue;
+        int v = isdigit((unsigned char)*p) ? *p - '0' : (tolower((unsigned char)*p) - 'a' + 10);
+        if (high_nibble < 0) {
+            high_nibble = v;
+        } else {
+            out[out_pos++] = (char)((high_nibble << 4) | v);
+            high_nibble = -1;
+        }
+    }
+}
+
 static void open_detail_view(const std::string &code_snapshot);
+static size_t runtime_from_tick(double tick);
+static size_t estimated_population_bytes(int engine_idx, size_t children, size_t famers);
+static size_t available_memory_bytes();
 
 // Rows carry just a (list, index) pair -- not a cloned genome -- so clicking
 // is the only time we ever pay for a snapshot. This used to clone every
@@ -119,7 +146,11 @@ static GtkWidget * make_row(const std::string &header, const std::string &body, 
     if (!body.empty()) {
         GtkWidget *body_label = gtk_label_new(body.c_str());
         gtk_label_set_xalign(GTK_LABEL(body_label), 0.0f);
-        gtk_label_set_wrap(GTK_LABEL(body_label), TRUE);
+        // One line only -- bounded_row_body() already truncates the text
+        // itself, this just guarantees it regardless (e.g. a body that's
+        // short in characters but happens to be wide for the row).
+        gtk_label_set_wrap(GTK_LABEL(body_label), FALSE);
+        gtk_label_set_ellipsize(GTK_LABEL(body_label), PANGO_ELLIPSIZE_END);
         gtk_widget_add_css_class(body_label, "monospace");
         gtk_box_append(GTK_BOX(row_box), body_label);
     }
@@ -153,6 +184,31 @@ static void on_detail_stack_page_changed(GObject*, GParamSpec*, gpointer) {
         refresh_code_panel();
 }
 
+// Row bodies show a one-line teaser of the genome's raw debug() dump --
+// full detail belongs in the champion code panel (refresh_code_panel(),
+// a real GtkTextView meant for exactly that), not in a list of up to 110
+// rows re-rendered every generation. Also caps what reaches Pango: a
+// neural genome's dump is one line per synapse, up to ANCESTOR_SYNAPSES =
+// 16,384 of them, and sanitize() escapes every real '\n' into a literal
+// "\x0A" -- so an untruncated dump becomes one giant unbroken ~500KB
+// line. Confirmed via perf while this was reportedly "stuck": 94.83% of
+// main-thread samples were inside libpango's text layout, reached through
+// gtk_widget_allocate, not anywhere near scoring or memory allocation.
+constexpr size_t MAX_ROW_BODY_CHARS = 80;
+static std::string bounded_row_body(const std::string &raw) {
+    // sanitize() only ever grows text (each byte maps to 1-4 output
+    // chars), so a MAX_ROW_BODY_CHARS*4-byte raw prefix is always enough
+    // to cover MAX_ROW_BODY_CHARS sanitized chars -- lets this truncate
+    // (and skip sanitizing) a ~500KB genome dump without ever touching
+    // more than a few hundred bytes of it.
+    std::string prefix = raw.substr(0, std::min(raw.size(), MAX_ROW_BODY_CHARS * 4));
+    std::string clean = sanitize(prefix);
+    bool truncated = prefix.size() < raw.size() || clean.size() > MAX_ROW_BODY_CHARS;
+    if (clean.size() > MAX_ROW_BODY_CHARS)
+        clean.resize(MAX_ROW_BODY_CHARS);
+    return truncated ? clean + "..." : clean;
+}
+
 static void refresh_lists() {
     if (!state_ready) return;
 
@@ -163,8 +219,18 @@ static void refresh_lists() {
     for (size_t i = 0; i < shown; i++) {
         std::string header = "#" + std::to_string(i + 1) +
             "   score " + std::to_string(State::children[i].score) +
-            "   size " + std::to_string(State::engine->size(State::children[i].code));
-        std::string body = sanitize(State::test->display(State::children[i].code));
+            "   size " + std::to_string(State::engine->size(State::children[i].code)) +
+            "   " + State::test->display(State::children[i].code);
+        // The code itself, in place of what used to be display()'s text --
+        // the win/correct count is more useful up in the header now that
+        // every test reports one, and watching the raw genome grow across
+        // generations is its own kind of interesting even when it's not
+        // exactly readable. Plain debug(), not clean_debug(): the clean
+        // variant walks the whole synapse list to a fixed point for the
+        // neural engine (see reachable_from_outputs() in brain.hpp) and is
+        // meant for one genome on demand, not up to 110 of them every
+        // generation.
+        std::string body = bounded_row_body(State::engine->debug(State::children[i].code));
         gtk_list_box_append(GTK_LIST_BOX(top10_list), make_row(header, body, (int)i, false));
     }
 
@@ -172,9 +238,10 @@ static void refresh_lists() {
         bool claimed = i < fame_scores.size() && fame_scores[i] != SIZE_MAX;
         std::string header = claimed
             ? ("score " + std::to_string(fame_scores[i]) +
-               "   size " + std::to_string(State::engine->size(State::hall_of_fame[i])))
+               "   size " + std::to_string(State::engine->size(State::hall_of_fame[i])) +
+               "   " + State::test->display(State::hall_of_fame[i]))
             : "(unclaimed startup ancestor)   size " + std::to_string(State::engine->size(State::hall_of_fame[i]));
-        std::string body = claimed ? sanitize(State::test->display(State::hall_of_fame[i])) : "";
+        std::string body = bounded_row_body(State::engine->debug(State::hall_of_fame[i]));
         gtk_list_box_append(GTK_LIST_BOX(fame_list), make_row(header, body, (int)i, true));
     }
 
@@ -218,6 +285,14 @@ static void record_generation() {
 // Same visual paradigm as fan_chart.plot: a grey 10th-90th percentile band,
 // a red median line, a green best-score line -- just drawn live from
 // score_history instead of gnuplot polling data.txt off disk.
+// How many trailing generations the chart plots. Scaling the y-axis to the
+// whole run's min/max meant one bad early generation (or one big early
+// improvement) pinned the axis forever -- every later generation, however
+// much it actually varied, flattened out near one edge. A trailing window
+// keeps the axis meaningful as the run progresses, at the cost of not
+// seeing the long-run trend in the same view.
+static constexpr size_t CHART_WINDOW = 300;
+
 static void draw_chart(GtkDrawingArea*, cairo_t *cr, int width, int height, gpointer) {
     if (score_history.size() < 2) {
         cairo_set_source_rgba(cr, 0.55, 0.55, 0.55, 0.9);
@@ -228,51 +303,76 @@ static void draw_chart(GtkDrawingArea*, cairo_t *cr, int width, int height, gpoi
         return;
     }
 
-    const size_t n = score_history.size();
+    const size_t n_total = score_history.size();
+    const size_t start = (n_total > CHART_WINDOW) ? n_total - CHART_WINDOW : 0;
+    const size_t n = n_total - start;
+
+    // Axis range tracks the 90th percentile (the shaded band's own top
+    // edge) rather than the absolute worst (100th percentile, index 0).
+    // The single worst genome in a generation can sit on a near-constant
+    // penalty score for a long stretch even as the band/median/best all
+    // improve -- anchoring the axis to it made the chart "way zoomed
+    // out", with all the actual movement squeezed into a sliver at the
+    // bottom. Nothing currently draws the 100th percentile as its own
+    // line anyway, so excluding it from the range costs nothing visually.
     size_t max_val = 0, min_val = SIZE_MAX;
-    for (auto &row : score_history) {
-        max_val = std::max(max_val, row[0]);    // 100th percentile (worst)
-        min_val = std::min(min_val, row[28]);   // 0th percentile (best)
+    for (size_t i = start; i < n_total; i++) {
+        max_val = std::max(max_val, score_history[i][10]);   // 90th percentile
+        min_val = std::min(min_val, score_history[i][28]);   // 0th percentile (best)
     }
     if (max_val == min_val) max_val = min_val + 1;
 
-    const double pad_l = 62, pad_r = 12, pad_t = 12, pad_b = 22;
+    const double pad_l = 68, pad_r = 12, pad_t = 12, pad_b = 22;
     const double plot_w = width - pad_l - pad_r;
     const double plot_h = height - pad_t - pad_b;
     if (plot_w <= 1 || plot_h <= 1) return;
 
     auto xf = [&](size_t i) { return pad_l + plot_w * (double)i / (double)(n - 1); };
     auto yf = [&](size_t v) { return pad_t + plot_h * (1.0 - (double)(v - min_val) / (double)(max_val - min_val)); };
+    auto row = [&](size_t i) -> const std::vector<size_t>& { return score_history[start + i]; };
+
+    // A handful of horizontal gridlines with their actual values, instead of
+    // just the top and bottom of the range.
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 11);
+    constexpr int GRID_LINES = 4;
+    char buf[64];
+    for (int g = 0; g <= GRID_LINES; g++) {
+        double frac = (double)g / GRID_LINES;
+        double y = pad_t + plot_h * frac;
+        size_t val = max_val - (size_t)(frac * (double)(max_val - min_val));
+
+        cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.15);
+        cairo_move_to(cr, pad_l, y);
+        cairo_line_to(cr, width - pad_r, y);
+        cairo_stroke(cr);
+
+        cairo_set_source_rgba(cr, 0.55, 0.55, 0.55, 0.9);
+        snprintf(buf, sizeof(buf), "%zu", val);
+        cairo_move_to(cr, 2, y + 4);
+        cairo_show_text(cr, buf);
+    }
 
     cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.35);
-    cairo_move_to(cr, xf(0), yf(score_history[0][10]));
-    for (size_t i = 1; i < n; i++) cairo_line_to(cr, xf(i), yf(score_history[i][10]));
-    for (size_t i = n; i-- > 0; ) cairo_line_to(cr, xf(i), yf(score_history[i][18]));
+    cairo_move_to(cr, xf(0), yf(row(0)[10]));
+    for (size_t i = 1; i < n; i++) cairo_line_to(cr, xf(i), yf(row(i)[10]));
+    for (size_t i = n; i-- > 0; ) cairo_line_to(cr, xf(i), yf(row(i)[18]));
     cairo_close_path(cr);
     cairo_fill(cr);
 
     cairo_set_line_width(cr, 2.0);
     cairo_set_source_rgb(cr, 0.85, 0.15, 0.15);
-    cairo_move_to(cr, xf(0), yf(score_history[0][14]));
-    for (size_t i = 1; i < n; i++) cairo_line_to(cr, xf(i), yf(score_history[i][14]));
+    cairo_move_to(cr, xf(0), yf(row(0)[14]));
+    for (size_t i = 1; i < n; i++) cairo_line_to(cr, xf(i), yf(row(i)[14]));
     cairo_stroke(cr);
 
     cairo_set_source_rgb(cr, 0.15, 0.65, 0.25);
-    cairo_move_to(cr, xf(0), yf(score_history[0][28]));
-    for (size_t i = 1; i < n; i++) cairo_line_to(cr, xf(i), yf(score_history[i][28]));
+    cairo_move_to(cr, xf(0), yf(row(0)[28]));
+    for (size_t i = 1; i < n; i++) cairo_line_to(cr, xf(i), yf(row(i)[28]));
     cairo_stroke(cr);
 
     cairo_set_source_rgba(cr, 0.55, 0.55, 0.55, 0.9);
-    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 11);
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%zu", max_val);
-    cairo_move_to(cr, 2, pad_t + 9);
-    cairo_show_text(cr, buf);
-    snprintf(buf, sizeof(buf), "%zu", min_val);
-    cairo_move_to(cr, 2, pad_t + plot_h);
-    cairo_show_text(cr, buf);
-    snprintf(buf, sizeof(buf), "gen 1..%zu", n);
+    snprintf(buf, sizeof(buf), "gen %zu..%zu", start + 1, n_total);
     cairo_move_to(cr, pad_l, height - 6);
     cairo_show_text(cr, buf);
 
@@ -350,6 +450,32 @@ static void set_running(bool run) {
 
             record_generation();
             refresh_lists();
+
+            // Same give-up condition as cli_interpret() in runner.cpp: once
+            // this many consecutive stagnant generations pass, the
+            // randomness passed to evolve() (State::def_rand minus how long
+            // it's been stuck) would bottom out -- a local minimum this
+            // stuck is a legitimate outcome, not something to spin on
+            // forever. Unlike the CLI, the GUI had no such check at all, so
+            // a long-stalled run would keep going until repetitions caught
+            // up to def_rand exactly and evolve() hit a live SIGFPE.
+            const char *stop_reason = nullptr;
+            if (State::children[0].score == 0)
+                stop_reason = "Solved!";
+            else if (State::repetitions >= State::def_rand)
+                stop_reason = "Gave up -- stuck at a local minimum.";
+
+            if (stop_reason) {
+                sim_running = false;
+                idle_id = 0;
+                gtk_button_set_label(GTK_BUTTON(play_button), "▶ Play");
+                std::string status = std::string(stop_reason) +
+                    "   Generation " + std::to_string(State::runs) +
+                    "   best score " + std::to_string(State::children[0].score);
+                gtk_label_set_text(GTK_LABEL(status_label), status.c_str());
+                return G_SOURCE_REMOVE;
+            }
+
             return sim_running ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
         }, nullptr);
     } else if (!run && idle_id != 0) {
@@ -365,15 +491,24 @@ static gboolean init_step(gpointer) {
     if (!initializing) return G_SOURCE_REMOVE;
 
     size_t target = std::min(init_total, init_done + INIT_CHUNK);
+    // score_from/score_to track this chunk's slice of State::children[] (if
+    // any) so it can be scored as one parallel_score() call instead of one
+    // genome at a time -- for the neural engine, a single score() call is
+    // expensive enough that serial scoring made a 10,000-genome population
+    // take minutes instead of seconds.
+    size_t score_from = State::total_creatures, score_to = 0;
     for (; init_done < target; init_done++) {
         if (init_done < State::total_famers) {
             State::hall_of_fame[init_done] = State::engine->ancestor_prog();
         } else {
             size_t ci = init_done - State::total_famers;
             State::children[ci].code = State::engine->ancestor_prog();
-            State::children[ci].score = State::test->score(State::children[ci].code);
+            score_from = std::min(score_from, ci);
+            score_to = ci + 1;
         }
     }
+    if (score_to > score_from)
+        parallel_score(score_from, score_to);
 
     std::string status = "Initializing population... " + std::to_string(init_done) +
         " / " + std::to_string(init_total);
@@ -390,14 +525,9 @@ static gboolean init_step(gpointer) {
     return G_SOURCE_REMOVE;
 }
 
-static void on_start_clicked(GtkButton*, gpointer) {
-    if (initializing) return;
+static void do_start(guint eidx, guint vidx, guint tidx) {
     set_running(false);
     free_state();
-
-    guint eidx = gtk_drop_down_get_selected(GTK_DROP_DOWN(engine_dropdown));
-    guint vidx = gtk_drop_down_get_selected(GTK_DROP_DOWN(evolver_dropdown));
-    guint tidx = gtk_drop_down_get_selected(GTK_DROP_DOWN(test_dropdown));
 
     // Previous run's engine/comp are never referenced again once we're past
     // this point (NodeView etc. copy out the data they need up front), so
@@ -412,6 +542,7 @@ static void on_start_clicked(GtkButton*, gpointer) {
     State::total_creatures = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(children_spin));
     State::total_famers = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(famers_spin));
     State::def_rand = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(randomness_spin));
+    State::max_runtime = runtime_from_tick(gtk_range_get_value(GTK_RANGE(max_runtime_scale)));
     size_t seed_val = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(seed_spin));
     State::seed = seed_val ? seed_val : (size_t)time(nullptr);
     State::repetitions = 0;
@@ -439,6 +570,51 @@ static void on_start_clicked(GtkButton*, gpointer) {
     g_idle_add(init_step, nullptr);
 }
 
+static void on_start_confirm_response(GObject *dialog, GAsyncResult *result, gpointer user_data) {
+    guint packed = GPOINTER_TO_UINT(user_data);
+    int button = gtk_alert_dialog_choose_finish(GTK_ALERT_DIALOG(dialog), result, nullptr);
+    if (button == 1) // "Start Anyway"
+        do_start(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF);
+}
+
+static void on_start_clicked(GtkButton*, gpointer) {
+    if (initializing) return;
+
+    guint eidx = gtk_drop_down_get_selected(GTK_DROP_DOWN(engine_dropdown));
+    guint vidx = gtk_drop_down_get_selected(GTK_DROP_DOWN(evolver_dropdown));
+    guint tidx = gtk_drop_down_get_selected(GTK_DROP_DOWN(test_dropdown));
+    size_t children = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(children_spin));
+    size_t famers = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(famers_spin));
+
+    size_t estimate = estimated_population_bytes((int)eidx, children, famers);
+    size_t available = available_memory_bytes();
+
+    // Warn instead of refusing outright -- MemAvailable is a moment-in-time
+    // number (other apps, reclaimable cache, and swap all move it), so a
+    // hard block would sometimes be wrong in either direction. This is what
+    // used to just silently stall/OOM-kill partway through population init
+    // with no explanation at all.
+    if (available > 0 && estimate > available * 7 / 10) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+            "This population needs about %.2f GB, but only about %.2f GB is currently available. "
+            "It may stall or be killed by the system out-of-memory handler partway through init. "
+            "Consider lowering Children/Hall of Fame size, or closing other apps first.",
+            estimate / (1024.0 * 1024 * 1024), available / (1024.0 * 1024 * 1024));
+        GtkAlertDialog *dialog = gtk_alert_dialog_new("%s", msg);
+        const char *buttons[] = {"Cancel", "Start Anyway", nullptr};
+        gtk_alert_dialog_set_buttons(dialog, buttons);
+        gtk_alert_dialog_set_cancel_button(dialog, 0);
+        gtk_alert_dialog_set_default_button(dialog, 0);
+        guint packed = eidx | (vidx << 8) | (tidx << 16);
+        gtk_alert_dialog_choose(dialog, GTK_WINDOW(main_window), nullptr, on_start_confirm_response, GUINT_TO_POINTER(packed));
+        g_object_unref(dialog);
+        return;
+    }
+
+    do_start(eidx, vidx, tidx);
+}
+
 static void on_play_clicked(GtkButton*, gpointer) {
     if (!state_ready) return;
     set_running(!sim_running);
@@ -458,6 +634,82 @@ static GtkWidget * labeled_column(const char *label, GtkWidget *widget) {
     gtk_box_append(GTK_BOX(col), lbl);
     gtk_box_append(GTK_BOX(col), widget);
     return col;
+}
+
+// The max-runtime slider is a tick count, not the raw iteration cap -- each
+// tick is a 4x multiple of the last, so one widget comfortably spans what
+// used to be five different hardcoded per-test constants (100K to 1e9)
+// without needing a 9-figure spin button.
+static size_t runtime_from_tick(double tick) {
+    return (size_t)(100.0 * std::pow(4.0, tick));
+}
+
+static void on_max_runtime_changed(GtkRange *range, gpointer) {
+    size_t v = runtime_from_tick(gtk_range_get_value(range));
+    gtk_label_set_text(GTK_LABEL(max_runtime_value_label), (std::to_string(v) + " iterations").c_str());
+}
+
+// A fresh ancestor genome's size for the given engine type -- a neural
+// genome starts at ANCESTOR_SYNAPSES * sizeof(Synapse) (128 KB); a
+// Brainfuck-family one starts as the 1-byte string "+" (see
+// Brainfuck_Base::ancestor_prog()). That ~131,000x gap never showed up
+// anywhere in the UI, so a population size that's perfectly fine for
+// Brainfuck can quietly ask for gigabytes on Network. Built from a
+// throwaway engine instance rather than calling ancestor_prog() itself,
+// so this can't perturb the shared rand() stream that evolution's own
+// determinism depends on (see on_start_clicked's comment on that).
+static size_t estimated_bytes_per_genome(int engine_idx) {
+    Engine * probe = make_engine(engine_idx);
+    size_t bytes = dynamic_cast<Brain*>(probe) ? (size_t)ANCESTOR_SYNAPSES * sizeof(Synapse) : 1;
+    delete probe;
+    return bytes;
+}
+
+static size_t estimated_population_bytes(int engine_idx, size_t children, size_t famers) {
+    return (children + famers) * estimated_bytes_per_genome(engine_idx);
+}
+
+static void update_memory_estimate() {
+    guint idx = gtk_drop_down_get_selected(GTK_DROP_DOWN(engine_dropdown));
+    size_t children = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(children_spin));
+    size_t famers = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(famers_spin));
+    size_t total_bytes = estimated_population_bytes((int)idx, children, famers);
+
+    char buf[64];
+    if (total_bytes >= 1024ull * 1024 * 1024)
+        snprintf(buf, sizeof(buf), "≈ %.2f GB genomes", total_bytes / (1024.0 * 1024 * 1024));
+    else if (total_bytes >= 1024 * 1024)
+        snprintf(buf, sizeof(buf), "≈ %.1f MB genomes", total_bytes / (1024.0 * 1024));
+    else
+        snprintf(buf, sizeof(buf), "≈ %.1f KB genomes", total_bytes / 1024.0);
+    gtk_label_set_text(GTK_LABEL(memory_estimate_label), buf);
+}
+
+static void on_memory_estimate_engine_changed(GObject*, GParamSpec*, gpointer) {
+    update_memory_estimate();
+}
+
+static void on_memory_estimate_spin_changed(GtkSpinButton*, gpointer) {
+    update_memory_estimate();
+}
+
+// /proc/meminfo's MemAvailable -- the kernel's own estimate of how much can
+// be allocated without swapping (unlike MemFree, it accounts for reclaimable
+// buff/cache), which is exactly the number that decides whether a big
+// population build sails through or starts thrashing. Returns 0 if it can't
+// be read (missing/non-Linux), which callers treat as "unknown, don't block."
+static size_t available_memory_bytes() {
+    std::ifstream meminfo("/proc/meminfo");
+    std::string line;
+    while (std::getline(meminfo, line)) {
+        if (line.rfind("MemAvailable:", 0) == 0) {
+            size_t kb = 0;
+            if (sscanf(line.c_str(), "MemAvailable: %zu kB", &kb) == 1)
+                return kb * 1024ull;
+            break;
+        }
+    }
+    return 0;
 }
 
 // ---------------------------------------------------------------------
@@ -482,6 +734,11 @@ struct BFView {
     size_t pc = 0;
     size_t steps = 0;
     bool halted = false;
+
+    // Same 256-byte input Engine::run() would get, editable live -- ','
+    // reads from it below instead of a hardcoded zero, so stepping through
+    // actually shows what this program does with the input you give it.
+    char input[256] = {0};
 
     GtkWidget *source_view = nullptr;
     GtkTextTag *pc_tag = nullptr;
@@ -532,7 +789,7 @@ static void bf_step(BFView &v) {
         case '<': v.pointer--; break;
         case '+': v.memory[v.pointer]++; break;
         case '-': v.memory[v.pointer]--; break;
-        case ',': v.memory[v.pointer] = 0; v.in_dex++; break;   // GUI always feeds zeroed input
+        case ',': v.memory[v.pointer] = v.input[v.in_dex++]; break;
         case '.': v.output += (char)v.memory[v.pointer]; v.out_dex++; break;
         case '0': v.memory[v.pointer] = 0; break;
         case '[':
@@ -662,8 +919,170 @@ static void bf_on_play(GtkButton*, gpointer data) {
 
 static void bf_on_destroy(GtkWidget*, gpointer data) {
     BFView *v = static_cast<BFView*>(data);
-    bf_stop_play(v);
+    // Just cancel the timer -- don't touch v->play_button. content's
+    // "destroy" firing means this whole view is already being torn down,
+    // so by the time this runs the button may already be gone (this was
+    // the source of "gtk_button_set_label: assertion 'GTK_IS_BUTTON
+    // (button)' failed": bf_stop_play() reset the label on a widget that
+    // was mid-teardown). No need to reset a label that's about to
+    // disappear anyway.
+    if (v->timeout_id) {
+        g_source_remove(v->timeout_id);
+        v->timeout_id = 0;
+    }
     delete v;
+}
+
+// Changing the input restarts the walkthrough from scratch -- in_dex may
+// already be partway through the old input, so there's no sane way to keep
+// going with the new bytes instead of just starting over.
+static void bf_on_input_changed(GtkEditable *editable, gpointer data) {
+    BFView *v = static_cast<BFView*>(data);
+    bf_stop_play(v);
+    parse_hex_input(gtk_editable_get_text(editable), v->input);
+    bf_reset(*v);
+    bf_render(v);
+}
+
+// ---------------------------------------------------------------------
+// Live playground: appended to the bottom of both the Brainfuck interpreter
+// view and the neural node view, whichever engine the champion is, when the
+// active Test is TicTacToe/Tic_Off -- a real game against the champion via
+// Engine::run(), same as score() would call it. Add/Crc8/Output don't get a
+// separate playground: their walkthroughs (the tape stepper's ',' reads,
+// the node view's trace) take the input directly instead, so there's one
+// input box driving the actual step-by-step visualization rather than a
+// second box off to the side just reporting a final result.
+// ---------------------------------------------------------------------
+static bool current_test_is_tic_tac_toe() {
+    for (int i = 0; i < num_tests; i++) {
+        if (tests[i] != State::test) continue;
+        std::string name = test_names[i];
+        return name == "TicTacToe" || name == "Tic_Off";
+    }
+    return false;
+}
+
+struct TTTPlayground {
+    std::string code;
+    alignas(256) char board[256];
+    GtkWidget *cells[9] = {nullptr};
+    GtkWidget *status = nullptr;
+};
+
+static bool ttt_playground_won(const char board[9], char player) {
+    static constexpr int LINES[8][3] = {
+        {0,1,2}, {3,4,5}, {6,7,8},
+        {0,3,6}, {1,4,7}, {2,5,8},
+        {0,4,8}, {2,4,6},
+    };
+    for (auto &line : LINES)
+        if (board[line[0]] == player && board[line[1]] == player && board[line[2]] == player)
+            return true;
+    return false;
+}
+
+static void ttt_playground_refresh(TTTPlayground *pg) {
+    for (int i = 0; i < 9; i++)
+        gtk_button_set_label(GTK_BUTTON(pg->cells[i]), std::string(1, pg->board[i]).c_str());
+}
+
+static void ttt_playground_end(TTTPlayground *pg, const std::string &msg) {
+    gtk_label_set_text(GTK_LABEL(pg->status), msg.c_str());
+    for (int i = 0; i < 9; i++)
+        gtk_widget_set_sensitive(pg->cells[i], FALSE);
+}
+
+static void ttt_playground_on_reset(GtkButton*, gpointer data) {
+    TTTPlayground *pg = static_cast<TTTPlayground*>(data);
+    std::fill(std::begin(pg->board), std::end(pg->board), 0);
+    std::fill(pg->board, pg->board + 9, ' ');
+    ttt_playground_refresh(pg);
+    gtk_label_set_text(GTK_LABEL(pg->status), "Your move (X) -- click a square.");
+    for (int i = 0; i < 9; i++)
+        gtk_widget_set_sensitive(pg->cells[i], TRUE);
+}
+
+static void ttt_playground_on_cell(GtkButton *btn, gpointer data) {
+    TTTPlayground *pg = static_cast<TTTPlayground*>(data);
+    int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "cell-idx"));
+    if (pg->board[idx] != ' ') return;
+
+    pg->board[idx] = 'X';
+    ttt_playground_refresh(pg);
+    if (ttt_playground_won(pg->board, 'X')) { ttt_playground_end(pg, "You win!"); return; }
+    if (std::none_of(pg->board, pg->board + 9, [](char c) { return c == ' '; })) {
+        ttt_playground_end(pg, "Draw.");
+        return;
+    }
+
+    alignas(256) char output[256] = {0};
+    State::engine->load(&pg->code);
+    size_t runtime = State::engine->run(pg->board, output, State::max_runtime);
+    unsigned char move = (unsigned char)output[0];
+    if (runtime >= State::max_runtime || move >= 9 || pg->board[move] != ' ') {
+        ttt_playground_end(pg, "Champion made an invalid move -- you win by forfeit.");
+        return;
+    }
+
+    pg->board[move] = 'O';
+    ttt_playground_refresh(pg);
+    if (ttt_playground_won(pg->board, 'O')) { ttt_playground_end(pg, "Champion wins!"); return; }
+    if (std::none_of(pg->board, pg->board + 9, [](char c) { return c == ' '; })) {
+        ttt_playground_end(pg, "Draw.");
+        return;
+    }
+    gtk_label_set_text(GTK_LABEL(pg->status), "Your move (X) -- click a square.");
+}
+
+static void ttt_playground_destroy(GtkWidget*, gpointer data) {
+    delete static_cast<TTTPlayground*>(data);
+}
+
+// Not a faithful replay of Tic_Off's board-flip self-play convention (which
+// always shows the engine itself as 'X') -- this always plays the human as
+// 'X' going first and hands the champion the literal board. Good enough for
+// "see how it plays," not meant to match training-time scoring exactly.
+static GtkWidget * build_ttt_playground(const std::string &code) {
+    TTTPlayground *pg = new TTTPlayground();
+    pg->code = code;
+
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+
+    GtkWidget *title = gtk_label_new("Play against this champion");
+    gtk_label_set_xalign(GTK_LABEL(title), 0.0f);
+    gtk_widget_add_css_class(title, "heading");
+    gtk_box_append(GTK_BOX(box), title);
+
+    GtkWidget *grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 4);
+    for (int i = 0; i < 9; i++) {
+        GtkWidget *btn = gtk_button_new_with_label(" ");
+        gtk_widget_set_size_request(btn, 48, 48);
+        g_object_set_data(G_OBJECT(btn), "cell-idx", GINT_TO_POINTER(i));
+        g_signal_connect(btn, "clicked", G_CALLBACK(ttt_playground_on_cell), pg);
+        gtk_grid_attach(GTK_GRID(grid), btn, i % 3, i / 3, 1, 1);
+        pg->cells[i] = btn;
+    }
+    gtk_box_append(GTK_BOX(box), grid);
+
+    pg->status = gtk_label_new("");
+    gtk_label_set_xalign(GTK_LABEL(pg->status), 0.0f);
+    gtk_box_append(GTK_BOX(box), pg->status);
+
+    GtkWidget *reset_btn = gtk_button_new_with_label("New game");
+    g_signal_connect(reset_btn, "clicked", G_CALLBACK(ttt_playground_on_reset), pg);
+    gtk_box_append(GTK_BOX(box), reset_btn);
+
+    g_signal_connect(box, "destroy", G_CALLBACK(ttt_playground_destroy), pg);
+
+    ttt_playground_on_reset(nullptr, pg);
+    return box;
+}
+
+static GtkWidget * build_playground_widget(const std::string &code) {
+    return current_test_is_tic_tac_toe() ? build_ttt_playground(code) : nullptr;
 }
 
 static void push_bf_view(const std::string &code) {
@@ -682,6 +1101,17 @@ static void push_bf_view(const std::string &code) {
     gtk_widget_set_margin_end(content, 10);
     gtk_widget_set_margin_top(content, 10);
     gtk_widget_set_margin_bottom(content, 10);
+
+    GtkWidget *input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *input_label = gtk_label_new("Input (hex, feeds ',' reads):");
+    gtk_box_append(GTK_BOX(input_row), input_label);
+    GtkWidget *input_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(input_entry), "e.g. 48 65 6C 6C 6F 20 70 61 70 61");
+    gtk_widget_add_css_class(input_entry, "monospace");
+    gtk_widget_set_hexpand(input_entry, TRUE);
+    g_signal_connect(input_entry, "changed", G_CALLBACK(bf_on_input_changed), v);
+    gtk_box_append(GTK_BOX(input_row), input_entry);
+    gtk_box_append(GTK_BOX(content), input_row);
 
     GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_widget_set_vexpand(paned, TRUE);
@@ -753,6 +1183,12 @@ static void push_bf_view(const std::string &code) {
 
     gtk_box_append(GTK_BOX(content), controls);
 
+    GtkWidget *playground = build_playground_widget(code);
+    if (playground) {
+        gtk_box_append(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
+        gtk_box_append(GTK_BOX(content), playground);
+    }
+
     g_signal_connect(content, "destroy", G_CALLBACK(bf_on_destroy), v);
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar_view), content);
 
@@ -780,6 +1216,8 @@ struct NodeLayout {
 };
 
 struct NodeView {
+    std::string code;   // genome this trace is against -- kept to re-trace on input changes
+    char input[256] = {0};
     std::vector<Synapse> wiring;
     std::vector<TraceRound> rounds;
     std::map<unsigned short, NodeLayout> pos;
@@ -1019,8 +1457,30 @@ static void node_on_play(GtkButton*, gpointer data) {
 
 static void node_on_destroy(GtkWidget*, gpointer data) {
     NodeView *v = static_cast<NodeView*>(data);
-    node_stop_play(v);
+    // See bf_on_destroy's comment: cancel the timer only, don't touch
+    // v->play_button -- it may already be mid-teardown by the time this
+    // fires.
+    if (v->timeout_id) {
+        g_source_remove(v->timeout_id);
+        v->timeout_id = 0;
+    }
     delete v;
+}
+
+// Same idea as the Brainfuck walkthrough's input box: re-traces from round
+// 0 against whatever's typed, instead of the fixed all-zero placeholder
+// trace() used to get -- so Step/Play actually show how this input
+// propagates instead of playing back an arbitrary fixed demo.
+static void node_on_input_changed(GtkEditable *editable, gpointer data) {
+    NodeView *v = static_cast<NodeView*>(data);
+    Brain *brain = dynamic_cast<Brain*>(State::engine);
+    if (!brain) return;
+
+    node_stop_play(v);
+    parse_hex_input(gtk_editable_get_text(editable), v->input);
+    v->rounds = brain->trace(&v->code, v->input);
+    v->round_idx = 0;
+    node_render(v);
 }
 
 static void push_node_view(const std::string &code) {
@@ -1028,14 +1488,9 @@ static void push_node_view(const std::string &code) {
     if (!brain) return;
 
     NodeView *v = new NodeView();
+    v->code = code;
     v->wiring = brain->clean_synapses(&code);
-    // Trace against whatever the current test actually scores this genome
-    // against (e.g. Output's "Hello papa"), not an arbitrary all-zero
-    // placeholder -- otherwise the input column never lights up regardless
-    // of what's really driving the champion.
-    char trace_input[256] = {0};
-    State::test->reference_input(trace_input);
-    v->rounds = brain->trace(&code, trace_input);
+    v->rounds = brain->trace(&code, v->input);   // v->input starts all-zero
     double content_h = node_layout(*v);
 
     GtkWidget *toolbar_view = adw_toolbar_view_new();
@@ -1047,6 +1502,17 @@ static void push_node_view(const std::string &code) {
     gtk_widget_set_margin_end(content, 10);
     gtk_widget_set_margin_top(content, 10);
     gtk_widget_set_margin_bottom(content, 10);
+
+    GtkWidget *input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *input_label = gtk_label_new("Input (hex, fed into the trace):");
+    gtk_box_append(GTK_BOX(input_row), input_label);
+    GtkWidget *input_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(input_entry), "e.g. 48 65 6C 6C 6F 20 70 61 70 61");
+    gtk_widget_add_css_class(input_entry, "monospace");
+    gtk_widget_set_hexpand(input_entry, TRUE);
+    g_signal_connect(input_entry, "changed", G_CALLBACK(node_on_input_changed), v);
+    gtk_box_append(GTK_BOX(input_row), input_entry);
+    gtk_box_append(GTK_BOX(content), input_row);
 
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, TRUE);
@@ -1089,6 +1555,12 @@ static void push_node_view(const std::string &code) {
 
     gtk_box_append(GTK_BOX(content), controls);
 
+    GtkWidget *playground = build_playground_widget(code);
+    if (playground) {
+        gtk_box_append(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
+        gtk_box_append(GTK_BOX(content), playground);
+    }
+
     g_signal_connect(content, "destroy", G_CALLBACK(node_on_destroy), v);
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar_view), content);
 
@@ -1129,6 +1601,20 @@ static void activate(GtkApplication *app, gpointer) {
     evolver_dropdown = gtk_drop_down_new_from_strings(evolver_nt);
     test_dropdown = gtk_drop_down_new_from_strings(test_nt);
 
+    // Default selection: JitFuck / Squarelite / Output -- by name rather
+    // than a bare index, so this doesn't silently point at the wrong
+    // thing if engine_names[]/evolver_names[]/test_names[] ever get
+    // reordered.
+    auto index_of = [](const char *const *names, int count, const char *target) -> guint {
+        for (int i = 0; i < count; i++)
+            if (strcmp(names[i], target) == 0)
+                return (guint)i;
+        return 0;
+    };
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(engine_dropdown), index_of(engine_names, num_engines, "JitFuck"));
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(evolver_dropdown), index_of(evolver_names, num_evolvers, "Squarelite"));
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(test_dropdown), index_of(test_names, num_tests, "Output"));
+
     seed_spin = gtk_spin_button_new_with_range(0, 2000000000, 1);
     children_spin = gtk_spin_button_new_with_range(4, 200000, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(children_spin), 10000);
@@ -1137,6 +1623,21 @@ static void activate(GtkApplication *app, gpointer) {
     randomness_spin = gtk_spin_button_new_with_range(1, 100000, 1);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(randomness_spin), 250);
 
+    // One shared cap instead of a different hardcoded constant per test
+    // (100K to 1e9 across the old MAX_RUNTIME/LOOP_MAX/MAX_TIC_TAC_TOE/
+    // MAX_TIC_OFF). Each tick is a 4x multiple of the last so that whole
+    // range fits on one slider.
+    GtkWidget *max_runtime_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    max_runtime_scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 15, 1);
+    gtk_scale_set_draw_value(GTK_SCALE(max_runtime_scale), FALSE);
+    gtk_range_set_value(GTK_RANGE(max_runtime_scale), 5);
+    gtk_widget_set_size_request(max_runtime_scale, 140, -1);
+    g_signal_connect(max_runtime_scale, "value-changed", G_CALLBACK(on_max_runtime_changed), nullptr);
+    max_runtime_value_label = gtk_label_new(std::to_string(runtime_from_tick(5)).append(" iterations").c_str());
+    gtk_widget_add_css_class(max_runtime_value_label, "caption");
+    gtk_box_append(GTK_BOX(max_runtime_box), max_runtime_scale);
+    gtk_box_append(GTK_BOX(max_runtime_box), max_runtime_value_label);
+
     gtk_box_append(GTK_BOX(config_box), labeled_column("Engine", engine_dropdown));
     gtk_box_append(GTK_BOX(config_box), labeled_column("Evolver", evolver_dropdown));
     gtk_box_append(GTK_BOX(config_box), labeled_column("Test", test_dropdown));
@@ -1144,6 +1645,20 @@ static void activate(GtkApplication *app, gpointer) {
     gtk_box_append(GTK_BOX(config_box), labeled_column("Children", children_spin));
     gtk_box_append(GTK_BOX(config_box), labeled_column("Hall of Fame size", famers_spin));
     gtk_box_append(GTK_BOX(config_box), labeled_column("Randomness", randomness_spin));
+    gtk_box_append(GTK_BOX(config_box), labeled_column("Max runtime", max_runtime_box));
+
+    // Live estimate of the population's genome storage -- the dominant cost
+    // of initializing a population, and the one that can quietly balloon
+    // into gigabytes for the neural engine (see estimated_bytes_per_genome).
+    // Updates as Engine/Children/Hall of Fame size change, before Start is
+    // ever clicked, so an unreasonable population size for this machine is
+    // visible up front instead of discovered as a stall five minutes in.
+    memory_estimate_label = gtk_label_new("");
+    g_signal_connect(engine_dropdown, "notify::selected", G_CALLBACK(on_memory_estimate_engine_changed), nullptr);
+    g_signal_connect(children_spin, "value-changed", G_CALLBACK(on_memory_estimate_spin_changed), nullptr);
+    g_signal_connect(famers_spin, "value-changed", G_CALLBACK(on_memory_estimate_spin_changed), nullptr);
+    update_memory_estimate();
+    gtk_box_append(GTK_BOX(config_box), labeled_column("Est. population size", memory_estimate_label));
 
     start_button = gtk_button_new_with_label("Start / Reset");
     gtk_widget_set_valign(start_button, GTK_ALIGN_END);

@@ -10,7 +10,7 @@ namespace Standard {
     void evolve(int mod) {
         // Keep the winner around so you never regress (agamogenesis) and reset
         for (size_t creature = mod; creature < State::total_creatures; creature++)
-            State::engine->evolve(State::children[creature % mod].code, State::children[creature].code, State::def_rand - State::repetitions);
+            State::engine->evolve(State::children[creature % mod].code, State::children[creature].code, clamped_sub(State::def_rand, State::repetitions));
     }
 
     // Scoring is the expensive part of a generation (every new child runs
@@ -31,8 +31,17 @@ namespace Standard {
             std::vector<std::thread> workers;
             std::vector<Engine *> engine_clones;
             std::vector<Engine *> comp_clones;
-            Engine * cloned_engine_from = nullptr;
-            Engine * cloned_comp_from = nullptr;
+            // Keyed by factory_id, not by Engine*: State::engine/comp get
+            // delete'd and rebuilt on every GUI "Start" click (see
+            // on_start_clicked), and a fresh allocation landing at the exact
+            // address just freed is common, not exotic -- a raw-pointer
+            // comparison here would then skip re-cloning and hand workers
+            // stale clones of whatever engine type used to live at that
+            // address. factory_id is stable proof of "same concrete type",
+            // regardless of which instance or address it came from.
+            int cloned_engine_factory_id = -1;
+            int cloned_comp_factory_id = -1;
+            bool have_comp_clones = false;
 
             size_t range_begin[WORKER_THREADS] = {0};
             size_t range_end[WORKER_THREADS] = {0};
@@ -94,17 +103,20 @@ namespace Standard {
 
                 Engine * real_engine = State::engine;
                 Engine * real_comp = State::comp;
-                if (cloned_engine_from != real_engine) {
+                if (cloned_engine_factory_id != real_engine->factory_id) {
                     for (auto * e : engine_clones) delete e;
                     for (int i = 0; i < WORKER_THREADS; i++)
                         engine_clones[i] = clone_engine(real_engine);
-                    cloned_engine_from = real_engine;
+                    cloned_engine_factory_id = real_engine->factory_id;
                 }
-                if (cloned_comp_from != real_comp) {
+                bool want_comp_clones = real_comp != nullptr;
+                int real_comp_factory_id = want_comp_clones ? real_comp->factory_id : -1;
+                if (have_comp_clones != want_comp_clones || cloned_comp_factory_id != real_comp_factory_id) {
                     for (auto * e : comp_clones) delete e;
                     for (int i = 0; i < WORKER_THREADS; i++)
-                        comp_clones[i] = real_comp ? clone_engine(real_comp) : nullptr;
-                    cloned_comp_from = real_comp;
+                        comp_clones[i] = want_comp_clones ? clone_engine(real_comp) : nullptr;
+                    cloned_comp_factory_id = real_comp_factory_id;
+                    have_comp_clones = want_comp_clones;
                 }
 
                 size_t span = total - begin;
@@ -145,4 +157,15 @@ namespace Standard {
             for (size_t i = mod + 1; i < State::total_creatures; i++)
                 printf("%zu\t", State::children[i].score);
     }
+}
+
+// Declared in state.hpp so cli.cpp/gui.cpp can score the initial ancestor
+// population without needing to know Standard::score_pool exists. Same
+// serial-first-item pattern as Standard::score_all() above, for the same
+// reason: forces Add/Crc8's per-generation cached-answer rebuild to happen
+// once before worker threads could race rebuilding it concurrently.
+void parallel_score(size_t begin, size_t total) {
+    if (begin >= total) return;
+    State::children[begin].score = State::test->score(State::children[begin].code);
+    Standard::score_pool.run(begin + 1, total);
 }

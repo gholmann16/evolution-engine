@@ -46,7 +46,13 @@ bool cli_interpret() {
         puts("Solved");
         return false;
     }
-    else if (State::def_rand - State::repetitions == 50) {
+    // Was "State::def_rand - State::repetitions == 50" -- an exact-equality
+    // check on an unsigned subtraction that skips right over the trigger
+    // value (never firing at all) whenever def_rand < 50, letting
+    // repetitions keep climbing until it hits def_rand exactly and the
+    // randomness passed to evolve() bottoms out at a live SIGFPE (see
+    // clamped_sub in state.hpp). >= is robust regardless of def_rand.
+    else if (State::repetitions >= State::def_rand) {
         puts("I give up");
         return false;
     }

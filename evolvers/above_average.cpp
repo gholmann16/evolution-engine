@@ -1,11 +1,11 @@
 class Above_Average : public Evolver {
     public:
         void evolve() const {
-            Standard::evolve(State::total_creatures / 2 - State::repetitions * State::total_creatures / (State::def_rand - 50));
+            Standard::evolve(State::total_creatures / 2 - State::repetitions * State::total_creatures / clamped_sub(State::def_rand, 50));
         }
 
         void score_all() const {
-            Standard::score_all(State::total_creatures / 2 - State::repetitions * State::total_creatures / 2 / (State::def_rand - 50));
+            Standard::score_all(State::total_creatures / 2 - State::repetitions * State::total_creatures / 2 / clamped_sub(State::def_rand, 50));
         }
 
         void sort() const {

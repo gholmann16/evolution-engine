@@ -1,46 +1,81 @@
 #include <string.h>
 
-#define MAX_RUNTIME 100000
+#define OUTPUT_TRIALS 10
 
 class Output : public Test {
     private:
-        static constexpr const char * REFERENCE_INPUT = "Hello papa";
-    public:
-        size_t score(const void * code) const override {
-            alignas(256) char input[256] = {0};
-            strncpy(input, REFERENCE_INPUT, sizeof(input));
-            alignas(256) char output[256] = {0};
-            State::engine->load(code);
+        // Same per-generation caching pattern as Add/Crc8: regenerate once
+        // when a new generation starts scoring, not once per genome.
+        alignas(256) inline static char noise_inputs[OUTPUT_TRIALS][256];
+        inline static size_t current_generation = -1;
 
-            if (State::engine->run(input, output, MAX_RUNTIME) == MAX_RUNTIME)
-                return MAX_RUNTIME * 50;
+        static void prepare_inputs() {
+            current_generation = State::runs;
+            for (int t = 0; t < OUTPUT_TRIALS; t++)
+                for (int i = 0; i < 256; i++)
+                    noise_inputs[t][i] = rand() % 256;
+        }
 
-            size_t total_score = 0;
+        // 0 = exact "Hello World" match; otherwise how far off, same
+        // weighting score() used to apply to its single trial.
+        static size_t trial_error(const char output[256]) {
             const char * expected = "Hello World";
 
             // output is a raw 256-byte buffer, not guaranteed null-terminated
             // (an evolved program can fill every byte via '.'); strnlen bounds
             // the scan instead of running off the end like strlen would.
-            int diff = strlen(expected) - strnlen(output, sizeof(output));
-            int max = (diff < 0) ? strlen(expected) : strnlen(output, sizeof(output));
-            total_score += 255 * abs(diff);
-            for (int ch = 0; ch < max; ch++) {
-                total_score += abs(expected[ch] - output[ch]);
+            int diff = (int)strlen(expected) - (int)strnlen(output, 256);
+            int max = (diff < 0) ? (int)strlen(expected) : (int)strnlen(output, 256);
+            size_t error = 255 * (size_t)abs(diff);
+            for (int ch = 0; ch < max; ch++)
+                error += (size_t)abs(expected[ch] - output[ch]);
+            return error;
+        }
+
+    public:
+        // Input is random noise, regenerated every generation, in
+        // OUTPUT_TRIALS different trials -- a program that hardcodes "Hello
+        // World" off whatever garbage it happens to read (or just never
+        // reads input at all) is exactly what this test is meant to reward,
+        // since real input is never trustworthy.
+        size_t score(const void * code) const override {
+            if (current_generation != State::runs)
+                prepare_inputs();
+
+            State::engine->load(code);
+
+            size_t total_error = 0;
+            for (int t = 0; t < OUTPUT_TRIALS; t++) {
+                alignas(256) char input[256];
+                memcpy(input, noise_inputs[t], sizeof(input));
+                alignas(256) char output[256] = {0};
+
+                if (State::engine->run(input, output, State::max_runtime) == State::max_runtime)
+                    return State::max_runtime * 50;
+
+                total_error += trial_error(output);
             }
 
-            return total_score ? total_score * 50 + State::engine->size(code) : 0;
+            return total_error ? total_error * 50 + State::engine->size(code) : 0;
         }
 
-        void reference_input(char input[256]) const override {
-            strncpy(input, REFERENCE_INPUT, 256);
-        }
-
+        // How many of this generation's noise inputs the genome turns into
+        // an exact "Hello World" -- a count is far more meaningful than
+        // showing one trial's raw text once there's more than one trial.
         std::string display(const void * code) const override {
-            alignas(256) char input[256] = {0};
-            strncpy(input, REFERENCE_INPUT, sizeof(input));
-            alignas(256) char output[256] = {0};
+            if (current_generation != State::runs)
+                prepare_inputs();
+
             State::engine->load(code);
-            State::engine->run(input, output, MAX_RUNTIME);
-            return std::string(output, strnlen(output, sizeof(output)));
+            int correct = 0;
+            for (int t = 0; t < OUTPUT_TRIALS; t++) {
+                alignas(256) char input[256];
+                memcpy(input, noise_inputs[t], sizeof(input));
+                alignas(256) char output[256] = {0};
+                State::engine->run(input, output, State::max_runtime);
+                if (trial_error(output) == 0)
+                    correct++;
+            }
+            return std::to_string(correct) + "/" + std::to_string(OUTPUT_TRIALS) + " correct";
         }
 };

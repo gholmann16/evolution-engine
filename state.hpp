@@ -55,19 +55,37 @@ Engine * make_engine(int id);
 // machine code, ...) that aren't safe to share across threads.
 Engine * clone_engine(const Engine * e);
 
+// Scores State::children[begin..total) using the same worker pool every
+// generation's scoring already goes through (see evolvers/standard.hpp's
+// ScorePool). Exposed here so the initial ancestor population -- built by
+// cli.cpp/gui.cpp before any Evolver is involved -- doesn't have to score
+// one genome at a time on a single thread: that was fine for the
+// Brainfuck-family engines but, for the neural engine, one score() call is
+// expensive enough that a 10,000-genome population could take minutes
+// instead of seconds serially.
+void parallel_score(size_t begin, size_t total);
+
+// Saturating a-b, floored at 1 (never 0). A couple of call sites derive a
+// "how aggressive should mutation be" value from State::def_rand minus
+// however many generations have been stuck (evolvers/standard.hpp,
+// evolvers/above_average.cpp) -- once the stuck count catches up to
+// def_rand that difference hits exactly 0, and 0 is a live SIGFPE a few
+// calls downstream (rand() % 0 / rng_below(0) in the engines, or a bare
+// "/ (def_rand - 50)" in above_average.cpp). Plain size_t subtraction would
+// also wrap to a huge number instead of erroring if b > a, which is just as
+// wrong, so this floors instead of wrapping either way.
+inline size_t clamped_sub(size_t a, size_t b) { return a > b ? a - b : 1; }
+
 class Test {
     public:
         virtual ~Test() = default;
         virtual size_t score(const void * code) const = 0;
-        // Optional human-readable rendering of what this code produces (e.g.
-        // the raw output string for Output). Empty string means "not shown".
+        // Optional human-readable summary of how the given genome does
+        // against this generation's trials, e.g. "7/10 correct" or "140/200
+        // games won" -- a count is meaningful regardless of how many trials
+        // a test runs per genome, unlike raw output text (which only ever
+        // shows one trial's result). Empty string means "not shown".
         virtual std::string display(const void * code) const { return ""; }
-        // Optional: fills `input` with the same input this test scores
-        // against, so a visualization (e.g. the neural node view) can trace
-        // a genome's actual response instead of an arbitrary placeholder.
-        // Default: leave it as the caller zeroed it -- fine for tests whose
-        // input is randomized/adversarial rather than one fixed pattern.
-        virtual void reference_input(char input[256]) const { }
 };
 
 extern Test * tests[];
@@ -109,6 +127,13 @@ namespace State {
     inline size_t def_rand = 250;
     inline bool verbose = false;
     inline size_t seed = 0;
+
+    // Shared engine->run() iteration cap, replacing what used to be a
+    // separate hardcoded constant per test (Output's MAX_RUNTIME, Add/Crc8's
+    // LOOP_MAX, TicTacToe's MAX_TIC_TAC_TOE, Tic_Off's MAX_TIC_OFF) -- one
+    // knob instead of five, since a test no longer has any way to know what
+    // a "reasonable" cap is better than the user configuring it directly.
+    inline size_t max_runtime = 100000;
 
     inline size_t repetitions = 0;
     inline size_t runs = 0;

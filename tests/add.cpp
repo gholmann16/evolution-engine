@@ -30,13 +30,28 @@ class Add : public Test {
             for (int i = 0; i < 10; i++) {
                 alignas(256) char output[256] = {0};
 
-                runtime += State::engine->run(inputs[i].data, output, LOOP_MAX - runtime);
-                if (runtime == LOOP_MAX)
-                    return LOOP_MAX * 50;
+                runtime += State::engine->run(inputs[i].data, output, State::max_runtime - runtime);
+                if (runtime == State::max_runtime)
+                    return State::max_runtime * 50;
 
                 error += abs(sum[i] - (unsigned char)output[0]);
             }
 
             return runtime + State::engine->size(code) * 5 + error;
+        }
+
+        std::string display(const void * code) const override {
+            if (current_generation != State::runs)
+                prepare_answer();
+
+            State::engine->load(code);
+            int correct = 0;
+            for (int i = 0; i < 10; i++) {
+                alignas(256) char output[256] = {0};
+                State::engine->run(inputs[i].data, output, State::max_runtime);
+                if ((unsigned char)output[0] == sum[i])
+                    correct++;
+            }
+            return std::to_string(correct) + "/10 correct";
         }
 };
