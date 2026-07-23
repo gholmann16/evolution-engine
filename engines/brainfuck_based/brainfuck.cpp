@@ -7,7 +7,7 @@
 
 class Brainfuck : public Brainfuck_Base {
     private:
-        bool validate(const std::string& code) {
+        bool invalidate(const std::string& code) {
             int open = 0;
             for (size_t x = 0; x < code.size(); x++) {
                 switch (code[x]) {
@@ -32,7 +32,7 @@ class Brainfuck : public Brainfuck_Base {
     public:
         void load(const void * code) {
             cp = reinterpret_cast<const std::string*>(code);
-            invalid = validate(*cp);
+            invalid = invalidate(*cp);
         }
         size_t run(char input[256], char output[256], size_t max) {
             if(invalid == true)

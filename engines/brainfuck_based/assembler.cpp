@@ -46,6 +46,7 @@ class JitFuck : public Brainfuck_Base {
 
         char * program;
         const char * last = NULL;
+        bool invalid;
 
     public:
         JitFuck() {
@@ -105,7 +106,7 @@ class JitFuck : public Brainfuck_Base {
                         break;
                     case ']':
                         if (brackets == 0) {
-                            program[0] = 0xC3;
+                            invalid = true;
                             return;
                         }
 
@@ -121,12 +122,15 @@ class JitFuck : public Brainfuck_Base {
             program[index++] = 0xC3; // this is ret
 
             if (brackets != 0) {
-                program[0] = 0xC3;
+                invalid = true;
                 return;
             }
         }
 
         size_t run(char input[256], char output[256], size_t max) {
+            if (invalid)
+                return max;
+
             alignas(65536) unsigned char memory[65536] = {0};
             // clock_t end = clock();
             // printf("assemble time = %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);

@@ -18,6 +18,8 @@
 #include <fstream>
 #include <cmath>
 #include <cctype>
+#include <thread>
+#include <atomic>
 
 // ---- GUI-only state (kept out of the State namespace on purpose: State is
 // the shared contract with the engines/tests/evolvers, this is just widgets
@@ -50,6 +52,37 @@ static const int PERCENTILE_STEPS[] = {
 static bool state_ready = false;
 static bool sim_running = false;
 static guint idle_id = 0;
+
+// One generation's evolve()+score_all()+sort() runs on this background
+// thread instead of directly on the idle callback -- Tic_Off/TicTacToe's
+// self-play against the whole hall of fame is far pricier per genome than
+// the other tests (up to ~18x more Engine::run() calls), and running that
+// synchronously on the GTK main thread meant the entire app -- not just
+// evolution -- was unresponsive for however long one generation took: GTK
+// couldn't even dispatch a Pause click until the callback returned. The
+// idle callback now just polls gen_ready instead of computing directly, so
+// the main loop keeps pumping events (Pause, list browsing, detail views)
+// while a generation is in flight. gen_thread must be joined (see
+// wait_for_generation()) before anything touches State::children/
+// hall_of_fame from the main thread, since this thread reads/writes them.
+static std::thread gen_thread;
+static std::atomic<bool> gen_ready{false};
+static bool gen_in_flight = false;
+
+// Blocks until any in-flight background generation finishes. Only called
+// from do_start() and on_window_destroy() -- both are about to free/replace
+// State::children/hall_of_fame, which would race with the background
+// thread if it were still running. Pause itself never calls this: it just
+// stops scheduling new generations, so the button stays instant even if one
+// happens to be mid-flight (that computation quietly finishes on its own
+// and its result is picked up -- or discarded -- next time something polls
+// gen_in_flight again).
+static void wait_for_generation() {
+    if (!gen_in_flight) return;
+    gen_thread.join();
+    gen_in_flight = false;
+    gen_ready = false;
+}
 
 // Chunked async population init -- building 10000+ ancestors and scoring
 // them synchronously on the button-click handler is what caused the "Start
@@ -418,10 +451,31 @@ static void set_running(bool run) {
         idle_id = g_idle_add([](gpointer) -> gboolean {
             if (!sim_running) return G_SOURCE_REMOVE;
 
-            srand(State::seed + State::runs);
-            State::evolver->evolve();
-            State::evolver->score_all();
-            State::evolver->sort();
+            if (gen_in_flight) {
+                if (!gen_ready.load()) return G_SOURCE_CONTINUE;
+                gen_thread.join();
+                gen_in_flight = false;
+                gen_ready = false;
+            } else {
+                // State::engine/comp are thread_local (see state.hpp) so
+                // that ScorePool's persistent workers each keep their own
+                // clone -- which means this brand-new thread starts with
+                // both null and needs its own copy of whatever the main
+                // thread's pointers currently are before calling anything
+                // that dereferences them.
+                Engine *e = State::engine, *c = State::comp;
+                gen_in_flight = true;
+                gen_thread = std::thread([e, c] {
+                    State::engine = e;
+                    State::comp = c;
+                    srand(State::seed + State::runs);
+                    State::evolver->evolve();
+                    State::evolver->score_all();
+                    State::evolver->sort();
+                    gen_ready = true;
+                });
+                return G_SOURCE_CONTINUE;
+            }
 
             // Mirrors cli_interpret()'s hall-of-fame bookkeeping in runner.cpp,
             // minus the file/console logging (the GUI shows this live instead).
@@ -527,6 +581,7 @@ static gboolean init_step(gpointer) {
 
 static void do_start(guint eidx, guint vidx, guint tidx) {
     set_running(false);
+    wait_for_generation();
     free_state();
 
     // Previous run's engine/comp are never referenced again once we're past
@@ -622,6 +677,7 @@ static void on_play_clicked(GtkButton*, gpointer) {
 
 static void on_window_destroy(GtkWidget*, gpointer) {
     set_running(false);
+    wait_for_generation();
     initializing = false;
     free_state();
 }
@@ -746,7 +802,14 @@ struct BFView {
     GtkWidget *output_label = nullptr;
     GtkWidget *status_label = nullptr;
     GtkWidget *play_button = nullptr;
+    GtkWidget *controls = nullptr;   // Step/Play/Reset row, locked while a gameplay move is pending
     guint timeout_id = 0;
+
+    // Fires once when a gameplay-triggered playback (see
+    // ttt_apply_trace_to_bf_view) reaches halt, then gets cleared -- manual
+    // Step/Play/replay afterward never re-trigger it.
+    void (*on_playback_done)(gpointer) = nullptr;
+    gpointer on_playback_done_data = nullptr;
 };
 
 static void bf_build_matches(BFView &v) {
@@ -878,6 +941,14 @@ static gboolean bf_play_tick(gpointer data) {
     BFView *v = static_cast<BFView*>(data);
     if (v->halted) {
         bf_stop_play(v);
+        if (v->on_playback_done) {
+            gtk_widget_set_sensitive(v->controls, TRUE);
+            void (*done)(gpointer) = v->on_playback_done;
+            gpointer done_data = v->on_playback_done_data;
+            v->on_playback_done = nullptr;
+            v->on_playback_done_data = nullptr;
+            done(done_data);
+        }
         return G_SOURCE_REMOVE;
     }
     // One instruction per tick at a slower cadence -- fast enough to watch
@@ -914,7 +985,8 @@ static void bf_on_play(GtkButton*, gpointer data) {
         bf_render(v);
     }
     v->timeout_id = g_timeout_add(120, bf_play_tick, v);
-    gtk_button_set_label(GTK_BUTTON(v->play_button), "⏸ Pause");
+    if (v->play_button)
+        gtk_button_set_label(GTK_BUTTON(v->play_button), "⏸ Pause");
 }
 
 static void bf_on_destroy(GtkWidget*, gpointer data) {
@@ -930,6 +1002,13 @@ static void bf_on_destroy(GtkWidget*, gpointer data) {
         g_source_remove(v->timeout_id);
         v->timeout_id = 0;
     }
+    // v->play_button is weak-pointer-tracked (see push_bf_view) precisely so
+    // the above is safe even if bf_play_tick's timer somehow ticks once more
+    // before g_source_remove takes effect -- but that tracking writes into
+    // this struct on the button's actual destruction, so it must be torn
+    // down before the struct holding the target address is freed below.
+    if (v->play_button)
+        g_object_remove_weak_pointer(G_OBJECT(v->play_button), (gpointer*)&v->play_button);
     delete v;
 }
 
@@ -942,6 +1021,26 @@ static void bf_on_input_changed(GtkEditable *editable, gpointer data) {
     parse_hex_input(gtk_editable_get_text(editable), v->input);
     bf_reset(*v);
     bf_render(v);
+}
+
+// Wires the TicTacToe playground to the Brainfuck/Skipfuck stepper sitting
+// above it: called with the literal board State::engine->run() just saw, so
+// a champion move replays and autoplays the exact instructions that produced
+// it -- same idea as ttt_apply_trace_to_node_view, just for the BF-family
+// walkthrough instead of the neural node view. on_done fires once the
+// program halts -- ttt_playground_on_cell uses it to reveal the move only
+// after the "thinking" finishes, not before.
+static void ttt_apply_trace_to_bf_view(BFView *v, const char board[256], void (*on_done)(gpointer), gpointer on_done_data) {
+    bf_stop_play(v);
+    std::copy(board, board + 256, v->input);
+    bf_reset(*v);
+    bf_render(v);
+    v->on_playback_done = on_done;
+    v->on_playback_done_data = on_done_data;
+    gtk_widget_set_sensitive(v->controls, FALSE);
+    v->timeout_id = g_timeout_add(120, bf_play_tick, v);
+    if (v->play_button)
+        gtk_button_set_label(GTK_BUTTON(v->play_button), "⏸ Pause");
 }
 
 // ---------------------------------------------------------------------
@@ -963,11 +1062,32 @@ static bool current_test_is_tic_tac_toe() {
     return false;
 }
 
+// NodeView is defined further down (it needs Brain/trace() machinery that
+// comes later in the file); forward-declared here so the playground can
+// hold a pointer to the node view it's paired with and hand it fresh
+// gameplay input, without reshuffling this whole section below NodeView.
+struct NodeView;
+static void ttt_apply_trace_to_node_view(NodeView *v, const char board[256], void (*on_done)(gpointer), gpointer on_done_data);
+
 struct TTTPlayground {
     std::string code;
     alignas(256) char board[256];
     GtkWidget *cells[9] = {nullptr};
     GtkWidget *status = nullptr;
+    GtkWidget *reset_btn = nullptr;
+    GtkWidget *champion_first_btn = nullptr;
+    NodeView *node_view = nullptr;   // non-null only when the champion is a Brain
+    BFView *bf_view = nullptr;       // non-null only when the champion is Brainfuck-family
+    unsigned char pending_move = 0;  // champion's chosen move, staged while the paired view "thinks"
+    size_t pending_runtime = 0;      // Engine::run()'s return value for pending_move above
+    // Whoever moves first is X, whoever moves second is O -- standard
+    // convention, and exactly what TicTacToe's score() itself tests (see
+    // play_game's two call sites: player='X' when the champion goes first,
+    // player='O' when it goes second). Settable per-game instead of always
+    // hardcoding the human as X, so "let the champion go first" actually
+    // exercises the half of training the human-always-first flow never did.
+    char human_mark = 'X';
+    char champion_mark = 'O';
 };
 
 static bool ttt_playground_won(const char board[9], char player) {
@@ -993,14 +1113,94 @@ static void ttt_playground_end(TTTPlayground *pg, const std::string &msg) {
         gtk_widget_set_sensitive(pg->cells[i], FALSE);
 }
 
-static void ttt_playground_on_reset(GtkButton*, gpointer data) {
+// Applies the champion's already-decided move (staged as pending_move/
+// pending_runtime by on_cell or start_game below). Called immediately when
+// there's no paired view to animate, or once that view finishes playing
+// back the moves/rounds that produced this move -- so the move is revealed
+// after the "thinking", never before it.
+static void ttt_playground_reveal_move(gpointer data) {
     TTTPlayground *pg = static_cast<TTTPlayground*>(data);
+    gtk_widget_set_sensitive(pg->reset_btn, TRUE);
+    gtk_widget_set_sensitive(pg->champion_first_btn, TRUE);
+    unsigned char move = pg->pending_move;
+    size_t runtime = pg->pending_runtime;
+
+    if (runtime >= State::max_runtime || move >= 9 || pg->board[move] != ' ') {
+        ttt_playground_end(pg, "Champion made an invalid move -- you win by forfeit.");
+        return;
+    }
+
+    pg->board[move] = pg->champion_mark;
+    ttt_playground_refresh(pg);
+    if (ttt_playground_won(pg->board, pg->champion_mark)) { ttt_playground_end(pg, "Champion wins!"); return; }
+    if (std::none_of(pg->board, pg->board + 9, [](char c) { return c == ' '; })) {
+        ttt_playground_end(pg, "Draw.");
+        return;
+    }
+    gtk_label_set_text(GTK_LABEL(pg->status), (std::string("Your move (") + pg->human_mark + ") -- click a square.").c_str());
+    for (int i = 0; i < 9; i++)
+        if (pg->board[i] == ' ')
+            gtk_widget_set_sensitive(pg->cells[i], TRUE);
+}
+
+// Stages pending_move/pending_runtime (already computed by the caller) for
+// reveal: locks the board, reset, and "champion goes first" controls, then
+// hands off to whichever paired view can animate the thinking that produced
+// it, or reveals immediately if there's no view to animate.
+static void ttt_playground_stage_move(TTTPlayground *pg) {
+    if (!pg->node_view && !pg->bf_view) {
+        ttt_playground_reveal_move(pg);
+        return;
+    }
+    // Block further clicks -- including a mid-thinking "New game" or
+    // "let champion go first" -- until the paired view's playback (started
+    // below, against the exact board run() just saw) finishes: otherwise
+    // you could sneak in another move, or reset the board, while the
+    // champion's move is still just staged, not yet on the board.
+    for (int i = 0; i < 9; i++)
+        gtk_widget_set_sensitive(pg->cells[i], FALSE);
+    gtk_widget_set_sensitive(pg->reset_btn, FALSE);
+    gtk_widget_set_sensitive(pg->champion_first_btn, FALSE);
+    gtk_label_set_text(GTK_LABEL(pg->status), "Champion is thinking...");
+    if (pg->node_view)
+        ttt_apply_trace_to_node_view(pg->node_view, pg->board, ttt_playground_reveal_move, pg);
+    else
+        ttt_apply_trace_to_bf_view(pg->bf_view, pg->board, ttt_playground_reveal_move, pg);
+}
+
+// Shared by "New game" (champion_first=false) and "Let champion go first"
+// (champion_first=true): clears the board, assigns marks for this game (see
+// TTTPlayground::human_mark/champion_mark), and either waits for the
+// human's first click or immediately stages the champion's opening move
+// against the empty board -- through the same "thinking" flow as any other
+// move, rather than just slapping a move down instantly.
+static void ttt_playground_start_game(TTTPlayground *pg, bool champion_first) {
     std::fill(std::begin(pg->board), std::end(pg->board), 0);
     std::fill(pg->board, pg->board + 9, ' ');
+    pg->champion_mark = champion_first ? 'X' : 'O';
+    pg->human_mark = champion_first ? 'O' : 'X';
     ttt_playground_refresh(pg);
-    gtk_label_set_text(GTK_LABEL(pg->status), "Your move (X) -- click a square.");
     for (int i = 0; i < 9; i++)
         gtk_widget_set_sensitive(pg->cells[i], TRUE);
+
+    if (!champion_first) {
+        gtk_label_set_text(GTK_LABEL(pg->status), (std::string("Your move (") + pg->human_mark + ") -- click a square.").c_str());
+        return;
+    }
+
+    alignas(256) char output[256] = {0};
+    State::engine->load(&pg->code);
+    pg->pending_runtime = State::engine->run(pg->board, output, State::max_runtime);
+    pg->pending_move = (unsigned char)output[0];
+    ttt_playground_stage_move(pg);
+}
+
+static void ttt_playground_on_reset(GtkButton*, gpointer data) {
+    ttt_playground_start_game(static_cast<TTTPlayground*>(data), false);
+}
+
+static void ttt_playground_on_champion_first(GtkButton*, gpointer data) {
+    ttt_playground_start_game(static_cast<TTTPlayground*>(data), true);
 }
 
 static void ttt_playground_on_cell(GtkButton *btn, gpointer data) {
@@ -1008,9 +1208,9 @@ static void ttt_playground_on_cell(GtkButton *btn, gpointer data) {
     int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "cell-idx"));
     if (pg->board[idx] != ' ') return;
 
-    pg->board[idx] = 'X';
+    pg->board[idx] = pg->human_mark;
     ttt_playground_refresh(pg);
-    if (ttt_playground_won(pg->board, 'X')) { ttt_playground_end(pg, "You win!"); return; }
+    if (ttt_playground_won(pg->board, pg->human_mark)) { ttt_playground_end(pg, "You win!"); return; }
     if (std::none_of(pg->board, pg->board + 9, [](char c) { return c == ' '; })) {
         ttt_playground_end(pg, "Draw.");
         return;
@@ -1018,21 +1218,9 @@ static void ttt_playground_on_cell(GtkButton *btn, gpointer data) {
 
     alignas(256) char output[256] = {0};
     State::engine->load(&pg->code);
-    size_t runtime = State::engine->run(pg->board, output, State::max_runtime);
-    unsigned char move = (unsigned char)output[0];
-    if (runtime >= State::max_runtime || move >= 9 || pg->board[move] != ' ') {
-        ttt_playground_end(pg, "Champion made an invalid move -- you win by forfeit.");
-        return;
-    }
-
-    pg->board[move] = 'O';
-    ttt_playground_refresh(pg);
-    if (ttt_playground_won(pg->board, 'O')) { ttt_playground_end(pg, "Champion wins!"); return; }
-    if (std::none_of(pg->board, pg->board + 9, [](char c) { return c == ' '; })) {
-        ttt_playground_end(pg, "Draw.");
-        return;
-    }
-    gtk_label_set_text(GTK_LABEL(pg->status), "Your move (X) -- click a square.");
+    pg->pending_runtime = State::engine->run(pg->board, output, State::max_runtime);
+    pg->pending_move = (unsigned char)output[0];
+    ttt_playground_stage_move(pg);
 }
 
 static void ttt_playground_destroy(GtkWidget*, gpointer data) {
@@ -1040,12 +1228,19 @@ static void ttt_playground_destroy(GtkWidget*, gpointer data) {
 }
 
 // Not a faithful replay of Tic_Off's board-flip self-play convention (which
-// always shows the engine itself as 'X') -- this always plays the human as
-// 'X' going first and hands the champion the literal board. Good enough for
-// "see how it plays," not meant to match training-time scoring exactly.
-static GtkWidget * build_ttt_playground(const std::string &code) {
+// always shows the engine itself as 'X', regardless of real move order) --
+// this hands the champion the literal, unflipped board, with marks assigned
+// by real move order (see TTTPlayground::human_mark/champion_mark). That
+// matches exactly how TicTacToe's own score() tests a champion (both
+// first-mover and second-mover, unflipped), but for a Tic_Off-trained
+// champion playing second, this is feeding it the opposite orientation it
+// was actually trained under. Good enough for "see how it plays," not meant
+// to match training-time scoring exactly.
+static GtkWidget * build_ttt_playground(const std::string &code, NodeView *node_view, BFView *bf_view) {
     TTTPlayground *pg = new TTTPlayground();
     pg->code = code;
+    pg->node_view = node_view;
+    pg->bf_view = bf_view;
 
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
 
@@ -1071,9 +1266,15 @@ static GtkWidget * build_ttt_playground(const std::string &code) {
     gtk_label_set_xalign(GTK_LABEL(pg->status), 0.0f);
     gtk_box_append(GTK_BOX(box), pg->status);
 
-    GtkWidget *reset_btn = gtk_button_new_with_label("New game");
-    g_signal_connect(reset_btn, "clicked", G_CALLBACK(ttt_playground_on_reset), pg);
-    gtk_box_append(GTK_BOX(box), reset_btn);
+    GtkWidget *button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    pg->reset_btn = gtk_button_new_with_label("New game");
+    g_signal_connect(pg->reset_btn, "clicked", G_CALLBACK(ttt_playground_on_reset), pg);
+    gtk_box_append(GTK_BOX(button_row), pg->reset_btn);
+
+    pg->champion_first_btn = gtk_button_new_with_label("Let champion go first");
+    g_signal_connect(pg->champion_first_btn, "clicked", G_CALLBACK(ttt_playground_on_champion_first), pg);
+    gtk_box_append(GTK_BOX(button_row), pg->champion_first_btn);
+    gtk_box_append(GTK_BOX(box), button_row);
 
     g_signal_connect(box, "destroy", G_CALLBACK(ttt_playground_destroy), pg);
 
@@ -1081,8 +1282,8 @@ static GtkWidget * build_ttt_playground(const std::string &code) {
     return box;
 }
 
-static GtkWidget * build_playground_widget(const std::string &code) {
-    return current_test_is_tic_tac_toe() ? build_ttt_playground(code) : nullptr;
+static GtkWidget * build_playground_widget(const std::string &code, NodeView *node_view = nullptr, BFView *bf_view = nullptr) {
+    return current_test_is_tic_tac_toe() ? build_ttt_playground(code, node_view, bf_view) : nullptr;
 }
 
 static void push_bf_view(const std::string &code) {
@@ -1102,16 +1303,21 @@ static void push_bf_view(const std::string &code) {
     gtk_widget_set_margin_top(content, 10);
     gtk_widget_set_margin_bottom(content, 10);
 
-    GtkWidget *input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    GtkWidget *input_label = gtk_label_new("Input (hex, feeds ',' reads):");
-    gtk_box_append(GTK_BOX(input_row), input_label);
-    GtkWidget *input_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(input_entry), "e.g. 48 65 6C 6C 6F 20 70 61 70 61");
-    gtk_widget_add_css_class(input_entry, "monospace");
-    gtk_widget_set_hexpand(input_entry, TRUE);
-    g_signal_connect(input_entry, "changed", G_CALLBACK(bf_on_input_changed), v);
-    gtk_box_append(GTK_BOX(input_row), input_entry);
-    gtk_box_append(GTK_BOX(content), input_row);
+    // TicTacToe/Tic_Off champions never read arbitrary bytes -- their ','
+    // input is the board state the playground below deals out, not
+    // free-form hex a user would type here, so the box is just noise.
+    if (!current_test_is_tic_tac_toe()) {
+        GtkWidget *input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        GtkWidget *input_label = gtk_label_new("Input (hex, feeds ',' reads):");
+        gtk_box_append(GTK_BOX(input_row), input_label);
+        GtkWidget *input_entry = gtk_entry_new();
+        gtk_entry_set_placeholder_text(GTK_ENTRY(input_entry), "e.g. 48 65 6C 6C 6F 20 70 61 70 61");
+        gtk_widget_add_css_class(input_entry, "monospace");
+        gtk_widget_set_hexpand(input_entry, TRUE);
+        g_signal_connect(input_entry, "changed", G_CALLBACK(bf_on_input_changed), v);
+        gtk_box_append(GTK_BOX(input_row), input_entry);
+        gtk_box_append(GTK_BOX(content), input_row);
+    }
 
     GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_widget_set_vexpand(paned, TRUE);
@@ -1168,6 +1374,7 @@ static void push_bf_view(const std::string &code) {
     gtk_box_append(GTK_BOX(content), v->status_label);
 
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    v->controls = controls;
     GtkWidget *step_btn = gtk_button_new_with_label("Step");
     g_signal_connect(step_btn, "clicked", G_CALLBACK(bf_on_step), v);
     gtk_box_append(GTK_BOX(controls), step_btn);
@@ -1176,6 +1383,7 @@ static void push_bf_view(const std::string &code) {
     gtk_widget_add_css_class(v->play_button, "suggested-action");
     g_signal_connect(v->play_button, "clicked", G_CALLBACK(bf_on_play), v);
     gtk_box_append(GTK_BOX(controls), v->play_button);
+    g_object_add_weak_pointer(G_OBJECT(v->play_button), (gpointer*)&v->play_button);
 
     GtkWidget *reset_btn = gtk_button_new_with_label("Reset");
     g_signal_connect(reset_btn, "clicked", G_CALLBACK(bf_on_reset), v);
@@ -1183,7 +1391,7 @@ static void push_bf_view(const std::string &code) {
 
     gtk_box_append(GTK_BOX(content), controls);
 
-    GtkWidget *playground = build_playground_widget(code);
+    GtkWidget *playground = build_playground_widget(code, nullptr, v);
     if (playground) {
         gtk_box_append(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
         gtk_box_append(GTK_BOX(content), playground);
@@ -1226,7 +1434,14 @@ struct NodeView {
     GtkWidget *canvas = nullptr;
     GtkWidget *status_label = nullptr;
     GtkWidget *play_button = nullptr;
+    GtkWidget *controls = nullptr;   // Step/Play/Reset row, locked while a gameplay move is pending
     guint timeout_id = 0;
+
+    // Fires once when a gameplay-triggered playback (see
+    // ttt_apply_trace_to_node_view) reaches its last round, then gets
+    // cleared -- manual Step/Play/replay afterward never re-trigger it.
+    void (*on_playback_done)(gpointer) = nullptr;
+    gpointer on_playback_done_data = nullptr;
 };
 
 static double node_layout(NodeView &v) {
@@ -1418,6 +1633,14 @@ static gboolean node_play_tick(gpointer data) {
         v->round_idx = v->rounds.empty() ? 0 : v->rounds.size() - 1;
         node_stop_play(v);
         node_render(v);
+        if (v->on_playback_done) {
+            gtk_widget_set_sensitive(v->controls, TRUE);
+            void (*done)(gpointer) = v->on_playback_done;
+            gpointer done_data = v->on_playback_done_data;
+            v->on_playback_done = nullptr;
+            v->on_playback_done_data = nullptr;
+            done(done_data);
+        }
         return G_SOURCE_REMOVE;
     }
     node_render(v);
@@ -1452,7 +1675,8 @@ static void node_on_play(GtkButton*, gpointer data) {
         node_render(v);
     }
     v->timeout_id = g_timeout_add(300, node_play_tick, v);
-    gtk_button_set_label(GTK_BUTTON(v->play_button), "⏸ Pause");
+    if (v->play_button)
+        gtk_button_set_label(GTK_BUTTON(v->play_button), "⏸ Pause");
 }
 
 static void node_on_destroy(GtkWidget*, gpointer data) {
@@ -1464,6 +1688,10 @@ static void node_on_destroy(GtkWidget*, gpointer data) {
         g_source_remove(v->timeout_id);
         v->timeout_id = 0;
     }
+    // See bf_on_destroy's matching comment -- untrack the weak pointer
+    // before freeing the struct it writes into.
+    if (v->play_button)
+        g_object_remove_weak_pointer(G_OBJECT(v->play_button), (gpointer*)&v->play_button);
     delete v;
 }
 
@@ -1481,6 +1709,33 @@ static void node_on_input_changed(GtkEditable *editable, gpointer data) {
     v->rounds = brain->trace(&v->code, v->input);
     v->round_idx = 0;
     node_render(v);
+}
+
+// Wires the TicTacToe playground to the node view sitting above it: called
+// with the literal board State::engine->run() just saw, so a champion move
+// re-traces and autoplays through the rounds that actually produced it,
+// instead of the node view sitting frozen on its initial all-zero-input
+// trace while a real game gets played below it. on_done fires once playback
+// reaches its last round -- ttt_playground_on_cell uses it to reveal the
+// move only after the "thinking" finishes, not before. Only ever called
+// with v non-null (see ttt_playground_on_cell); the dynamic_cast guard below
+// exists for the same reason node_on_input_changed has one -- State::engine
+// is a global that this view doesn't own.
+static void ttt_apply_trace_to_node_view(NodeView *v, const char board[256], void (*on_done)(gpointer), gpointer on_done_data) {
+    Brain *brain = dynamic_cast<Brain*>(State::engine);
+    if (!brain) { on_done(on_done_data); return; }
+
+    node_stop_play(v);
+    std::copy(board, board + 256, v->input);
+    v->rounds = brain->trace(&v->code, v->input);
+    v->round_idx = 0;
+    v->on_playback_done = on_done;
+    v->on_playback_done_data = on_done_data;
+    gtk_widget_set_sensitive(v->controls, FALSE);
+    node_render(v);
+    v->timeout_id = g_timeout_add(300, node_play_tick, v);
+    if (v->play_button)
+        gtk_button_set_label(GTK_BUTTON(v->play_button), "⏸ Pause");
 }
 
 static void push_node_view(const std::string &code) {
@@ -1503,16 +1758,21 @@ static void push_node_view(const std::string &code) {
     gtk_widget_set_margin_top(content, 10);
     gtk_widget_set_margin_bottom(content, 10);
 
-    GtkWidget *input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    GtkWidget *input_label = gtk_label_new("Input (hex, fed into the trace):");
-    gtk_box_append(GTK_BOX(input_row), input_label);
-    GtkWidget *input_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(input_entry), "e.g. 48 65 6C 6C 6F 20 70 61 70 61");
-    gtk_widget_add_css_class(input_entry, "monospace");
-    gtk_widget_set_hexpand(input_entry, TRUE);
-    g_signal_connect(input_entry, "changed", G_CALLBACK(node_on_input_changed), v);
-    gtk_box_append(GTK_BOX(input_row), input_entry);
-    gtk_box_append(GTK_BOX(content), input_row);
+    // Same reasoning as push_bf_view: a TicTacToe/Tic_Off champion's input is
+    // the board the playground below deals out, not user-typed hex, so
+    // there's nothing meaningful for this box to drive.
+    if (!current_test_is_tic_tac_toe()) {
+        GtkWidget *input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        GtkWidget *input_label = gtk_label_new("Input (hex, fed into the trace):");
+        gtk_box_append(GTK_BOX(input_row), input_label);
+        GtkWidget *input_entry = gtk_entry_new();
+        gtk_entry_set_placeholder_text(GTK_ENTRY(input_entry), "e.g. 48 65 6C 6C 6F 20 70 61 70 61");
+        gtk_widget_add_css_class(input_entry, "monospace");
+        gtk_widget_set_hexpand(input_entry, TRUE);
+        g_signal_connect(input_entry, "changed", G_CALLBACK(node_on_input_changed), v);
+        gtk_box_append(GTK_BOX(input_row), input_entry);
+        gtk_box_append(GTK_BOX(content), input_row);
+    }
 
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, TRUE);
@@ -1540,6 +1800,7 @@ static void push_node_view(const std::string &code) {
     gtk_box_append(GTK_BOX(content), v->status_label);
 
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    v->controls = controls;
     GtkWidget *step_btn = gtk_button_new_with_label("Step");
     g_signal_connect(step_btn, "clicked", G_CALLBACK(node_on_step), v);
     gtk_box_append(GTK_BOX(controls), step_btn);
@@ -1548,6 +1809,7 @@ static void push_node_view(const std::string &code) {
     gtk_widget_add_css_class(v->play_button, "suggested-action");
     g_signal_connect(v->play_button, "clicked", G_CALLBACK(node_on_play), v);
     gtk_box_append(GTK_BOX(controls), v->play_button);
+    g_object_add_weak_pointer(G_OBJECT(v->play_button), (gpointer*)&v->play_button);
 
     GtkWidget *reset_btn = gtk_button_new_with_label("Reset");
     g_signal_connect(reset_btn, "clicked", G_CALLBACK(node_on_reset), v);
@@ -1555,7 +1817,7 @@ static void push_node_view(const std::string &code) {
 
     gtk_box_append(GTK_BOX(content), controls);
 
-    GtkWidget *playground = build_playground_widget(code);
+    GtkWidget *playground = build_playground_widget(code, v);
     if (playground) {
         gtk_box_append(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
         gtk_box_append(GTK_BOX(content), playground);

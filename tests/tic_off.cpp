@@ -55,7 +55,7 @@ class Tic_Off : public Test {
         //
         static int fight(Engine * first, Engine * second) {
             alignas(256) char board[256] = "         ";
-            alignas(256) char output[256];
+            alignas(256) char output[256] = {0};
             if (first->run(board, output, State::max_runtime) == State::max_runtime || place(board, output[0]))
                 return -1;
             for (int i = 0; i < 4; i++) {

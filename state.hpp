@@ -10,34 +10,40 @@ struct Program {
 };
 
 class Engine {
-    public:
-        virtual ~Engine() = default;
-        bool trainable = false;
-        // Index into engine_names[]/make_engine(), stamped on by
-        // make_engine() at construction time. Lets clone_engine() rebuild
-        // "another one of whatever this is" without keeping a registry of
-        // live instances around just to compare pointers against.
-        int factory_id = -1;
+public:
+    virtual ~Engine() = default;
+    bool trainable = false;
 
-        // input read only, output should be non freeable memory, too many allocs otherwise. Return looptime/runtime
-        // virtual size_t train(void * code, char input[256], char output[256], size_t max) = 0;
-        virtual void load(const void * code) = 0;
-        virtual size_t run(char input[256], char output[256], size_t max) = 0;
+    // Stamped on by make_engine() at construction time, allows clone_engine() rebuild without reference
+    int factory_id = -1;
+    // virtual size_t train(void * code, char input[256], char output[256], size_t max) = 0;
 
-        // Evolving
-        virtual void * ancestor_prog() = 0;
-        virtual void evolve(const void * parent, void * child, size_t randomness) = 0;
+    // Parse/JIT-compile a genome into whatever internal form `run()` needs.
+    virtual void load(const void * code) = 0;
+    /* 
+        * input read only, output should be non freeable memory, too many allocs otherwise.
+        * Return looptime/runtime, cost capped at `max`. What that cost actually counts differs per engine
+        * (in future versions I'd like a sanity check like time or raw assembly ops)
+        */
+    virtual size_t run(char input[256], char output[256], size_t max) = 0;
 
-        // Utility
-        virtual std::string debug(const void * code) = 0; // Should be an allocated string
-        // Same as debug(), but with irrelevant/unreachable structure pruned
-        // where that's meaningful (e.g. dead synapses in the neural engine).
-        // Defaults to the raw debug() for engines with no such concept.
-        virtual std::string clean_debug(const void * code) { return debug(code); }
-        virtual std::string compile(const void * code) = 0; // Allocated string ready to be passed to assembler
-        virtual bool equal(const void * first, const void * second) = 0;
-        virtual size_t size(const void * code) = 0;
-        virtual void copy_into(const void * parent, void * child) = 0;
+    // Creates a default genome to start evolving from.
+    virtual void * ancestor_prog() = 0;
+    // Evolve `parent` into `child`. The lower the more aggressive
+    virtual void evolve(const void * parent, void * child, size_t randomness) = 0;
+
+    // Human-readable dump of a genome, should be an allocated string
+    virtual std::string debug(const void * code) = 0;
+    // Same as debug(), but with unreachable structure pruned
+    virtual std::string clean_debug(const void * code) { return debug(code); }
+    // Allocated string ready to be passed to assembler. Currently unused/unfinished in every engine
+    virtual std::string compile(const void * code) = 0;
+    // Possibily fuzzy equality check, used for hall-of-fame repeat detection and fitness pool diversity checks.
+    virtual bool equal(const void * first, const void * second) = 0;
+    // A size metric, used as a fitness tie-breaker.
+    virtual size_t size(const void * code) = 0;
+    // Wipe an allocated program and copy parent code into it.
+    virtual void copy_into(const void * parent, void * child) = 0;
 };
 
 extern const char * engine_names[];
@@ -77,15 +83,12 @@ void parallel_score(size_t begin, size_t total);
 inline size_t clamped_sub(size_t a, size_t b) { return a > b ? a - b : 1; }
 
 class Test {
-    public:
-        virtual ~Test() = default;
-        virtual size_t score(const void * code) const = 0;
-        // Optional human-readable summary of how the given genome does
-        // against this generation's trials, e.g. "7/10 correct" or "140/200
-        // games won" -- a count is meaningful regardless of how many trials
-        // a test runs per genome, unlike raw output text (which only ever
-        // shows one trial's result). Empty string means "not shown".
-        virtual std::string display(const void * code) const { return ""; }
+public:
+    virtual ~Test() = default;
+    // lower is better
+    virtual size_t score(const void * code) const = 0;
+    // explains more in depth how a given genome did, e.g. how many times did it do a perfect job
+    virtual std::string display(const void * code) const { return ""; }
 };
 
 extern Test * tests[];
@@ -93,16 +96,19 @@ extern const char * test_names[];
 extern int num_tests;
 
 class Evolver {
-    public:
-        virtual ~Evolver() = default;
+public:
+    virtual ~Evolver() = default;
 
-        inline static bool compare_ratings(const Program& first, const Program &second) {
-            return first.score < second.score;
-        }
+    inline static bool compare_ratings(const Program& first, const Program &second) {
+        return first.score < second.score;
+    }
 
-        virtual void evolve() const = 0;
-        virtual void score_all() const = 0;
-        virtual void sort() const = 0;
+    // Decide how to allocate children slots and how many genomes survive
+    virtual void evolve() const = 0;
+    // Runs through and scores the genomes
+    virtual void score_all() const = 0;
+    // Decides which genomes "win" in a given generation, processing both randomness and diversity
+    virtual void sort() const = 0;
 };
 
 extern Evolver * evolvers[];

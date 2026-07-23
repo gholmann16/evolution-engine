@@ -44,6 +44,13 @@ class TicTacToe : public Test {
         // concurrent score() calls from the scoring thread pool need their
         // own counter, not one shared across threads.
         inline static thread_local size_t total_runtime;
+
+        // Mirrors total_runtime's pattern: games_left[]-weighted count of
+        // wins, accumulated the same way losses already are below. score()
+        // never reads this -- it exists purely so display() can report a
+        // real "wins out of 1329" figure (384 + 945, see play_game's two
+        // call sites in score()) instead of a smaller, unrelated sample.
+        inline static thread_local size_t total_wins;
         static size_t play_game(char board[256], char output[256], int empty, char player, char other) {
             alignas(256) char save_board[256];
             size_t total_recursive_score = 0;
@@ -66,7 +73,7 @@ class TicTacToe : public Test {
                 }
 
                 if (won(save_board, player))
-                    total_recursive_score += 0;
+                    total_wins += games_left[empty - 1];
                 else if (empty)
                     total_recursive_score += play_game(save_board, output, empty - 2, player, other);
             }
@@ -89,7 +96,7 @@ class TicTacToe : public Test {
         // scoring/evolution objective.
         static int fight(Engine * first, Engine * second) {
             alignas(256) char board[256] = "         ";
-            alignas(256) char output[256];
+            alignas(256) char output[256] = {0};
             for (int turn = 0; turn < 9; turn++) {
                 Engine * mover = (turn % 2 == 0) ? first : second;
                 char mark = (turn % 2 == 0) ? 'X' : 'O';
@@ -126,16 +133,24 @@ class TicTacToe : public Test {
                 return 0;
         }
 
-        // Concrete games (via fight()) against the whole hall of fame,
-        // purely to report a "wins out of games played" count.
+        // Same first_turn()/play_game() computation score() itself uses
+        // (not fight() against the hall of fame -- that was a smaller,
+        // unrelated sample size that didn't match score()'s actual
+        // objective), replayed here purely to report wins against the full
+        // 1329-game exhaustive search (384 as first mover + 945 as second,
+        // see play_game's two call sites in score() above).
         std::string display(const void * code) const override {
+            alignas(256) char output[256] = {0};
+            alignas(256) char board[256] = "         ";
+            alignas(256) char board2[256] = "         ";
+
             State::engine->load(code);
-            int wins = 0;
-            for (size_t i = 0; i < State::total_famers; i++) {
-                State::comp->load(State::hall_of_fame[i]);
-                if (fight(State::engine, State::comp) == 1) wins++;
-                if (fight(State::comp, State::engine) == -1) wins++;
-            }
-            return std::to_string(wins) + "/" + std::to_string(State::total_famers * 2) + " games won";
+            total_wins = 0;
+            first_turn(board, output);
+            if (!place(board, output[0], 'X'))
+                play_game(board, output, 8, 'X', 'O');
+            play_game(board2, output, 9, 'O', 'X');
+
+            return std::to_string(total_wins) + "/1329 games won";
         }
 };
