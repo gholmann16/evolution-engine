@@ -6,6 +6,7 @@
 #include <cairo.h>
 #include <state.hpp>
 #include <engines/neural_based/brain.hpp>
+#include <tests/tictactoe_common.hpp>
 #include <cstring>
 #include <cstdlib>
 #include <cstdint>
@@ -600,6 +601,10 @@ static void do_start(guint eidx, guint vidx, guint tidx) {
     State::max_runtime = runtime_from_tick(gtk_range_get_value(GTK_RANGE(max_runtime_scale)));
     size_t seed_val = (size_t)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(seed_spin));
     State::seed = seed_val ? seed_val : (size_t)time(nullptr);
+    // Write the actual seed back into the spinner -- if the user left it at
+    // 0 (random), this is the only place they'd ever see which seed a good
+    // run actually used, so they can reproduce it later.
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(seed_spin), (double)State::seed);
     State::repetitions = 0;
     State::runs = 0;
 
@@ -1057,7 +1062,7 @@ static bool current_test_is_tic_tac_toe() {
     for (int i = 0; i < num_tests; i++) {
         if (tests[i] != State::test) continue;
         std::string name = test_names[i];
-        return name == "TicTacToe" || name == "Tic_Off";
+        return name == "TicTacToe" || name == "Tic_Off" || name == "Tournament_Toe";
     }
     return false;
 }
@@ -1072,6 +1077,7 @@ static void ttt_apply_trace_to_node_view(NodeView *v, const char board[256], voi
 struct TTTPlayground {
     std::string code;
     alignas(256) char board[256];
+    alignas(256) char seen_board[256];   // board as the engine actually saw it (flipped if champion_mark is 'O')
     GtkWidget *cells[9] = {nullptr};
     GtkWidget *status = nullptr;
     GtkWidget *reset_btn = nullptr;
@@ -1163,9 +1169,9 @@ static void ttt_playground_stage_move(TTTPlayground *pg) {
     gtk_widget_set_sensitive(pg->champion_first_btn, FALSE);
     gtk_label_set_text(GTK_LABEL(pg->status), "Champion is thinking...");
     if (pg->node_view)
-        ttt_apply_trace_to_node_view(pg->node_view, pg->board, ttt_playground_reveal_move, pg);
+        ttt_apply_trace_to_node_view(pg->node_view, pg->seen_board, ttt_playground_reveal_move, pg);
     else
-        ttt_apply_trace_to_bf_view(pg->bf_view, pg->board, ttt_playground_reveal_move, pg);
+        ttt_apply_trace_to_bf_view(pg->bf_view, pg->seen_board, ttt_playground_reveal_move, pg);
 }
 
 // Shared by "New game" (champion_first=false) and "Let champion go first"
@@ -1189,8 +1195,10 @@ static void ttt_playground_start_game(TTTPlayground *pg, bool champion_first) {
     }
 
     alignas(256) char output[256] = {0};
+    std::copy(std::begin(pg->board), std::end(pg->board), std::begin(pg->seen_board));
+    if (pg->champion_mark == 'O') flip(pg->seen_board);
     State::engine->load(&pg->code);
-    pg->pending_runtime = State::engine->run(pg->board, output, State::max_runtime);
+    pg->pending_runtime = State::engine->run(pg->seen_board, output, State::max_runtime);
     pg->pending_move = (unsigned char)output[0];
     ttt_playground_stage_move(pg);
 }
@@ -1217,8 +1225,10 @@ static void ttt_playground_on_cell(GtkButton *btn, gpointer data) {
     }
 
     alignas(256) char output[256] = {0};
+    std::copy(std::begin(pg->board), std::end(pg->board), std::begin(pg->seen_board));
+    if (pg->champion_mark == 'O') flip(pg->seen_board);
     State::engine->load(&pg->code);
-    pg->pending_runtime = State::engine->run(pg->board, output, State::max_runtime);
+    pg->pending_runtime = State::engine->run(pg->seen_board, output, State::max_runtime);
     pg->pending_move = (unsigned char)output[0];
     ttt_playground_stage_move(pg);
 }
@@ -1227,15 +1237,6 @@ static void ttt_playground_destroy(GtkWidget*, gpointer data) {
     delete static_cast<TTTPlayground*>(data);
 }
 
-// Not a faithful replay of Tic_Off's board-flip self-play convention (which
-// always shows the engine itself as 'X', regardless of real move order) --
-// this hands the champion the literal, unflipped board, with marks assigned
-// by real move order (see TTTPlayground::human_mark/champion_mark). That
-// matches exactly how TicTacToe's own score() tests a champion (both
-// first-mover and second-mover, unflipped), but for a Tic_Off-trained
-// champion playing second, this is feeding it the opposite orientation it
-// was actually trained under. Good enough for "see how it plays," not meant
-// to match training-time scoring exactly.
 static GtkWidget * build_ttt_playground(const std::string &code, NodeView *node_view, BFView *bf_view) {
     TTTPlayground *pg = new TTTPlayground();
     pg->code = code;
@@ -1413,11 +1414,32 @@ static void push_bf_view(const std::string &code) {
 // Brain::trace()'s rounds highlighting synapses as they fire and coloring
 // each node by its current potential -- "how it comes up with ideas."
 // ---------------------------------------------------------------------
-// Shared between node_layout() and node_draw() so the column headers always
-// line up with the nodes actually drawn under them.
-static const double NODE_COL_X[3] = {70, 380, 690};
+// Shared between node_layout() and node_draw() so the row labels always
+// line up with the nodes actually drawn next to them.
+static const double NODE_ROW_Y[3] = {70, 260, 450};
 static const char * const NODE_COL_LABELS[3] = {"Input", "Hidden", "Output"};
-static const double NODE_TOP_MARGIN = 50;   // leaves room for the column header row
+static const double NODE_LEFT_MARGIN = 100;   // leaves room for the row label
+
+// Oscillators share the Input row -- they're lower-numbered than every real
+// input neuron, so they always sort to the front of it (see node_layout()).
+static int node_group(unsigned short id) {
+    if (id < HIDDEN_START) return 0;
+    if (id < EXCLUDING) return 1;
+    return 2;
+}
+
+// Small label drawn above a neuron's circle: which literal bit of the
+// 256-byte buffer an input/output neuron is, or which oscillator number a
+// clock neuron is -- plain hidden neurons don't get one.
+static std::string node_neuron_label(unsigned short id) {
+    if (id < OSCILLATOR_NEURONS)
+        return "Osc " + std::to_string(id + 1);
+    if (id < HIDDEN_START)
+        return "bit " + std::to_string(id - INPUT_START);
+    if (id >= EXCLUDING)
+        return "bit " + std::to_string(id - EXCLUDING);
+    return "";
+}
 
 struct NodeLayout {
     double x, y;
@@ -1433,6 +1455,7 @@ struct NodeView {
 
     GtkWidget *canvas = nullptr;
     GtkWidget *status_label = nullptr;
+    GtkWidget *output_label = nullptr;   // decoded first VISIBLE_OUTPUT_BYTES output bytes, this round
     GtkWidget *play_button = nullptr;
     GtkWidget *controls = nullptr;   // Step/Play/Reset row, locked while a gameplay move is pending
     guint timeout_id = 0;
@@ -1450,22 +1473,46 @@ static double node_layout(NodeView &v) {
         for (const NeuronSample &n : v.rounds[0].neurons)
             ids.insert(n.neuron);
 
-    std::map<int, std::vector<unsigned short>> columns;
-    for (unsigned short id : ids) {
-        int col = (id < INPUT_NEURONS) ? 0 : (id < EXCLUDING ? 1 : 2);
-        columns[col].push_back(id);
-    }
+    std::map<int, std::vector<unsigned short>> rows;
+    for (unsigned short id : ids)
+        rows[node_group(id)].push_back(id);
 
-    const double spacing = 54;   // circles now run up to ~46px across; keep rows from overlapping
-    double max_y = 200;
-    for (auto &[col, list] : columns) {
+    const double spacing = 54;   // circles now run up to ~46px across; keep neurons from overlapping
+    double max_x = 200;
+    for (auto &[row, list] : rows) {
         for (size_t i = 0; i < list.size(); i++) {
-            double y = NODE_TOP_MARGIN + i * spacing;
-            v.pos[list[i]] = {NODE_COL_X[col], y};
-            max_y = std::max(max_y, y + 34);
+            double x = NODE_LEFT_MARGIN + i * spacing;
+            v.pos[list[i]] = {x, NODE_ROW_Y[row]};
+            max_x = std::max(max_x, x + 34);
         }
     }
-    return max_y;
+    return max_x;
+}
+
+// Decodes the first VISIBLE_OUTPUT_BYTES output bytes from a trace round's
+// neuron potentials -- the same bit-per-neuron, MSB-first scheme run()
+// itself decodes with, so this is exactly what the champion is outputting
+// as of this round (kept[] always includes these neurons, see
+// reachable_from_outputs()).
+static std::string node_decode_output(const TraceRound &round) {
+    std::map<unsigned short, float> values;
+    for (const NeuronSample &n : round.neurons)
+        values[n.neuron] = n.value;
+
+    std::string hex;
+    for (int position = 0; position < VISIBLE_OUTPUT_BYTES; position++) {
+        unsigned char byte = 0;
+        for (int bit = 0; bit < 8; bit++) {
+            auto it = values.find(EXCLUDING + position * 8 + bit);
+            if (it != values.end() && it->second >= THRESHOLD)
+                byte |= 128 >> bit;
+        }
+        char buf[4];
+        snprintf(buf, sizeof(buf), "%02X ", byte);
+        hex += buf;
+    }
+    if (!hex.empty()) hex.pop_back();
+    return hex;
 }
 
 static void node_render(NodeView *v) {
@@ -1476,6 +1523,17 @@ static void node_render(NodeView *v) {
         "   nodes shown " + std::to_string(v->pos.size()) +
         "   synapses shown " + std::to_string(v->wiring.size());
     gtk_label_set_text(GTK_LABEL(v->status_label), status.c_str());
+
+    // Only a meaningful, freestanding byte stream for the non-game tests --
+    // TicTacToe/Tic_Off/Tournament_Toe only ever read output[0] as a cell
+    // index, and the playground already shows the move/game outcome, so a
+    // raw hex dump here would just be noise for those.
+    if (v->output_label) {
+        std::string out = "Output (first " + std::to_string(VISIBLE_OUTPUT_BYTES) + " bytes): " +
+            (v->rounds.empty() ? "" : node_decode_output(v->rounds[v->round_idx]));
+        gtk_label_set_text(GTK_LABEL(v->output_label), out.c_str());
+    }
+
     gtk_widget_queue_draw(v->canvas);
 }
 
@@ -1522,11 +1580,11 @@ static void node_draw(GtkDrawingArea*, cairo_t *cr, int, int, gpointer data) {
     cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 13);
     cairo_set_source_rgba(cr, 0.75, 0.75, 0.75, 0.95);
-    for (int col = 0; col < 3; col++) {
+    for (int row = 0; row < 3; row++) {
         cairo_text_extents_t ext;
-        cairo_text_extents(cr, NODE_COL_LABELS[col], &ext);
-        cairo_move_to(cr, NODE_COL_X[col] - ext.width / 2.0 - ext.x_bearing, 20);
-        cairo_show_text(cr, NODE_COL_LABELS[col]);
+        cairo_text_extents(cr, NODE_COL_LABELS[row], &ext);
+        cairo_move_to(cr, 10, NODE_ROW_Y[row] - ext.height / 2.0 - ext.y_bearing);
+        cairo_show_text(cr, NODE_COL_LABELS[row]);
     }
 
     std::map<unsigned short, float> values;
@@ -1614,6 +1672,19 @@ static void node_draw(GtkDrawingArea*, cairo_t *cr, int, int, gpointer data) {
         cairo_move_to(cr, p.x - extents.width / 2.0 - extents.x_bearing,
                           p.y - extents.height / 2.0 - extents.y_bearing);
         cairo_show_text(cr, buf);
+
+        std::string tag = node_neuron_label(id);
+        if (!tag.empty()) {
+            cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+            cairo_set_font_size(cr, 9);
+            cairo_set_source_rgba(cr, 0.8, 0.8, 0.8, 0.9);
+            cairo_text_extents_t tag_ext;
+            cairo_text_extents(cr, tag.c_str(), &tag_ext);
+            cairo_move_to(cr, p.x - tag_ext.width / 2.0 - tag_ext.x_bearing, p.y - radius - 6);
+            cairo_show_text(cr, tag.c_str());
+            cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+            cairo_set_font_size(cr, 9);
+        }
     }
 }
 
@@ -1746,7 +1817,7 @@ static void push_node_view(const std::string &code) {
     v->code = code;
     v->wiring = brain->clean_synapses(&code);
     v->rounds = brain->trace(&code, v->input);   // v->input starts all-zero
-    double content_h = node_layout(*v);
+    double content_w = node_layout(*v);
 
     GtkWidget *toolbar_view = adw_toolbar_view_new();
     GtkWidget *header = adw_header_bar_new();
@@ -1777,8 +1848,8 @@ static void push_node_view(const std::string &code) {
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, TRUE);
     v->canvas = gtk_drawing_area_new();
-    gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(v->canvas), 820);
-    gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(v->canvas), (int)content_h);
+    gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(v->canvas), (int)content_w);
+    gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(v->canvas), 520);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(v->canvas), node_draw, v, nullptr);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), v->canvas);
     gtk_box_append(GTK_BOX(content), scroll);
@@ -1798,6 +1869,13 @@ static void push_node_view(const std::string &code) {
     v->status_label = gtk_label_new("");
     gtk_label_set_xalign(GTK_LABEL(v->status_label), 0.0f);
     gtk_box_append(GTK_BOX(content), v->status_label);
+
+    if (!current_test_is_tic_tac_toe()) {
+        v->output_label = gtk_label_new("");
+        gtk_label_set_xalign(GTK_LABEL(v->output_label), 0.0f);
+        gtk_widget_add_css_class(v->output_label, "monospace");
+        gtk_box_append(GTK_BOX(content), v->output_label);
+    }
 
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     v->controls = controls;

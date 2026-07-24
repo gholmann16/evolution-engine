@@ -20,12 +20,15 @@ struct LiveSynapse {
     unsigned short output;
 };
 
-#define SIZE 8192                 // 2048 in + 4096 hidden + 2048 out
-#define SYNAPSES 10
-#define CAPACITY (SIZE * SYNAPSES * 2)
+#define OSCILLATOR_NEURONS 10     // fixed-period clock neurons, ids 0..9 (period = id+1 rounds)
 #define INPUT_NEURONS 2048        // 256 bytes * 8 bits, uses the whole input buffer
 #define OUTPUT_NEURONS 2048       // 256 bytes * 8 bits, bit-packed into the whole output buffer
-#define EXCLUDING (SIZE - OUTPUT_NEURONS)   // neurons 0..EXCLUDING propagate (inputs + hidden)
+#define SIZE (OSCILLATOR_NEURONS + INPUT_NEURONS + 4096 + OUTPUT_NEURONS)   // oscillators + in + hidden + out
+#define SYNAPSES 10
+#define CAPACITY (SIZE * SYNAPSES * 2)
+#define INPUT_START OSCILLATOR_NEURONS             // real input bits start here, after the oscillators
+#define HIDDEN_START (INPUT_START + INPUT_NEURONS) // first valid synapse target (hidden neurons begin here)
+#define EXCLUDING (SIZE - OUTPUT_NEURONS)   // neurons 0..EXCLUDING propagate (oscillators + inputs + hidden)
 #define THRESHOLD 0.7f
 #define LEAK 0.9f
 #define EQUAL_BAR 0.90f           // >= 90% shared wiring counts as "the same creature"
@@ -49,7 +52,7 @@ struct TraceRound {
     std::vector<FiredSynapse> fired;
 };
 
-static_assert(SIZE >= INPUT_NEURONS + OUTPUT_NEURONS, "no room for hidden neurons");
+static_assert(SIZE >= OSCILLATOR_NEURONS + INPUT_NEURONS + OUTPUT_NEURONS, "no room for hidden neurons");
 static_assert(SIZE <= 65536, "neuron indices must fit unsigned short");
 static_assert(INPUT_NEURONS == 256 * 8 && OUTPUT_NEURONS == 256 * 8,
               "run() maps the full 256-byte buffers bit-per-neuron");
@@ -130,10 +133,19 @@ class Brain : public Engine {
         }
 
         void leak(float * __restrict neuron, bool * __restrict to_fire) {
-            for (int i = INPUT_NEURONS; i < SIZE; i++) {
+            for (int i = HIDDEN_START; i < SIZE; i++) {
                 neuron[i] *= LEAK;
                 to_fire[i] = neuron[i] >= THRESHOLD;
             }
+        }
+
+        // Oscillator k (0-indexed here, "Oscillator k+1" in the GUI) fires on
+        // a fixed period instead of accumulating potential like every other
+        // neuron -- period k+1 rounds, 1-indexed round count, so oscillator 0
+        // fires every round and oscillator 9 fires every 10th.
+        void tick_oscillators(bool * to_fire, int round_number) {
+            for (int k = 0; k < OSCILLATOR_NEURONS; k++)
+                to_fire[k] = (round_number % (k + 1)) == 0;
         }
 
         void noise(float neuron[SIZE]) {
@@ -144,30 +156,38 @@ class Brain : public Engine {
         }
 
     public:
-        // "Super random" wiring, with one guardrail: every input neuron gets
-        // at least one outgoing synapse. Purely random sparse wiring leaves
-        // many inputs disconnected, and a dead input gives evolution zero
-        // gradient to ever discover it. The guardrail costs nothing and only
-        // adds randomness (the target and weight are still random). Delete
-        // the first loop if you want pure chaos.
+        // "Super random" wiring, with one guardrail: every input neuron (and
+        // every oscillator) gets at least one outgoing synapse. Purely random
+        // sparse wiring leaves many inputs disconnected, and a dead input
+        // gives evolution zero gradient to ever discover it. The guardrail
+        // costs nothing and only adds randomness (the target and weight are
+        // still random). Delete the first two loops if you want pure chaos.
         // Uses rand() directly: called once at startup, so speed is
         // irrelevant and it stays on your srand() stream for determinism.
         void * ancestor_prog() override {
             std::string * new_prog = new std::string();
             new_prog->reserve(ANCESTOR_SYNAPSES * sizeof(Synapse));
 
-            for (int i = 0; i < INPUT_NEURONS; i++) {
+            for (int i = 0; i < OSCILLATOR_NEURONS; i++) {
                 Synapse s = {
                     .input = static_cast<unsigned short>(i),
-                    .output = static_cast<unsigned short>(INPUT_NEURONS + rand() % (SIZE - INPUT_NEURONS)),
+                    .output = static_cast<unsigned short>(HIDDEN_START + rand() % (SIZE - HIDDEN_START)),
                     .multiplier = -2.0f + 4.0f * (float)rand() / RAND_MAX,
                 };
                 new_prog->append(reinterpret_cast<const char*>(&s), sizeof(Synapse));
             }
-            for (int i = INPUT_NEURONS; i < ANCESTOR_SYNAPSES; i++) {
+            for (int i = 0; i < INPUT_NEURONS; i++) {
+                Synapse s = {
+                    .input = static_cast<unsigned short>(INPUT_START + i),
+                    .output = static_cast<unsigned short>(HIDDEN_START + rand() % (SIZE - HIDDEN_START)),
+                    .multiplier = -2.0f + 4.0f * (float)rand() / RAND_MAX,
+                };
+                new_prog->append(reinterpret_cast<const char*>(&s), sizeof(Synapse));
+            }
+            for (int i = OSCILLATOR_NEURONS + INPUT_NEURONS; i < ANCESTOR_SYNAPSES; i++) {
                 Synapse s = {
                     .input = static_cast<unsigned short>(rand() % EXCLUDING),                       // any propagating neuron
-                    .output = static_cast<unsigned short>(INPUT_NEURONS + rand() % (SIZE - INPUT_NEURONS)), // any non-input neuron
+                    .output = static_cast<unsigned short>(HIDDEN_START + rand() % (SIZE - HIDDEN_START)), // any non-input, non-oscillator neuron
                     .multiplier = -2.0f + 4.0f * (float)rand() / RAND_MAX,
                 };
                 new_prog->append(reinterpret_cast<const char*>(&s), sizeof(Synapse));
@@ -235,7 +255,7 @@ class Brain : public Engine {
                     if (rng() & 1) {
                         addition = (Synapse) {
                             .input = data[rng_below((uint32_t)count)].input, // make sure input exists, weight towards active
-                            .output = static_cast<unsigned short>(INPUT_NEURONS + rng_below(SIZE - INPUT_NEURONS)),
+                            .output = static_cast<unsigned short>(HIDDEN_START + rng_below(SIZE - HIDDEN_START)),
                             .multiplier = -limit + rng_unit() * (2 * limit),
                         };
                     }
@@ -273,10 +293,11 @@ class Brain : public Engine {
             for (int position = 0; position < 256; position++) {
                 unsigned char byte = (unsigned char)input[position];
                 for (int bit = 0; bit < 8; bit++)
-                    to_fire[position * 8 + bit] = (byte >> (7 - bit)) & 1;
+                    to_fire[INPUT_START + position * 8 + bit] = (byte >> (7 - bit)) & 1;
             }
 
             for (int count = 0; count < RUNS; count++) {
+                tick_oscillators(to_fire, count + 1);
                 leak(neuron, to_fire);
                 noise(neuron);
                 fires += fire(neuron, to_fire);
@@ -314,15 +335,21 @@ class Brain : public Engine {
         // those bytes, directly or through some chain of other synapses.
         // Anything not marked is dead wiring as far as that output slice is
         // concerned (an unreachable output neuron, or a hidden neuron whose
-        // every downstream path dead-ends). Repeated full passes rather than
+        // every downstream path dead-ends). Only an output neuron that's
+        // actually wired to seeds the pass -- an output nothing targets, or
+        // an oscillator nothing downstream of it reaches, stays unkept and
+        // never shows up in the node view. Repeated full passes rather than
         // a real adjacency-list BFS -- genomes here are thousands of
         // synapses, not millions, and this only runs on-demand for one
         // genome at a time (debug view / node view), never in the hot loop.
         std::vector<bool> reachable_from_outputs(const Synapse * data, size_t count, int visible_bytes) {
             std::vector<bool> kept(SIZE, false);
             int visible_neurons = std::min(visible_bytes * 8, OUTPUT_NEURONS);
-            for (int i = 0; i < visible_neurons; i++)
-                kept[EXCLUDING + i] = true;
+            for (size_t i = 0; i < count; i++) {
+                unsigned short out = data[i].output;
+                if (out >= EXCLUDING && out < EXCLUDING + visible_neurons)
+                    kept[out] = true;
+            }
 
             bool changed = true;
             while (changed) {
@@ -378,7 +405,7 @@ class Brain : public Engine {
             for (int position = 0; position < 256; position++) {
                 unsigned char byte = (unsigned char)input[position];
                 for (int bit = 0; bit < 8; bit++)
-                    to_fire[position * 8 + bit] = (byte >> (7 - bit)) & 1;
+                    to_fire[INPUT_START + position * 8 + bit] = (byte >> (7 - bit)) & 1;
             }
 
             std::vector<TraceRound> rounds;
@@ -394,6 +421,7 @@ class Brain : public Engine {
             rounds.push_back(std::move(initial));
 
             for (int r = 0; r < RUNS; r++) {
+                tick_oscillators(to_fire, r + 1);
                 leak(neuron, to_fire);
                 noise(neuron);
 

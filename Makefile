@@ -9,7 +9,7 @@ gui.out: gui.o engines.o tests.o evolvers.o
 
 # Objects
 
-tests.o: state.hpp tests/tests.cpp tests/crc8.cpp tests/output.cpp tests/tic_off.cpp tests/tictactoe.cpp tests/add.cpp
+tests.o: state.hpp tests/tests.cpp tests/crc8.cpp tests/output.cpp tests/tic_off.cpp tests/tictactoe.cpp tests/tournament_toe.cpp tests/tictactoe_common.hpp tests/add.cpp
 	g++ $(CFLAGS) tests/tests.cpp
 
 evolvers.o: state.hpp evolvers/evolvers.cpp evolvers/standard.hpp evolvers/above_average.cpp evolvers/squarelite.cpp evolvers/top_10_percent.cpp

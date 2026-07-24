@@ -3,6 +3,7 @@
 #include "output.cpp"
 #include "tic_off.cpp"
 #include "tictactoe.cpp"
+#include "tournament_toe.cpp"
 #include "add.cpp"
 
 Test * tests[] = {
@@ -10,6 +11,7 @@ Test * tests[] = {
     new Output(),
     new Tic_Off(),
     new TicTacToe(),
+    new Tournament_Toe(),
     new Add(),
 };
 
@@ -18,6 +20,7 @@ const char * test_names[] = {
     "Output",
     "Tic_Off",
     "TicTacToe",
+    "Tournament_Toe",
     "Add",
 };
 

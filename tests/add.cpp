@@ -37,7 +37,7 @@ class Add : public Test {
                 error += abs(sum[i] - (unsigned char)output[0]);
             }
 
-            return error ? runtime + State::engine->size(code) * 5 + error * 100 : 0;
+            return error ? runtime + State::engine->size(code) * 5 + error * 10000 : 0;
         }
 
         std::string display(const void * code) const override {
