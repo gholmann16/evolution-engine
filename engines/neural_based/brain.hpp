@@ -268,7 +268,7 @@ class Brain : public Engine {
                     }
                     i--; // i-- to run again
                 }
-                if (chance < changes * 2) // delete
+                else if (chance < changes * 2) // delete
                     continue;
                 else // modify
                     addition = data[i];
