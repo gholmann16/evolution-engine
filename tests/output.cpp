@@ -53,7 +53,9 @@ class Output : public Test {
                 if (State::engine->run(input, output, State::max_runtime) == State::max_runtime)
                     return State::max_runtime * 50;
 
-                total_error += trial_error(output);
+                size_t error = trial_error(output);
+                State::engine->reward(error);
+                total_error += error;
             }
 
             return total_error ? total_error * 50 + State::engine->size(code) : 0;

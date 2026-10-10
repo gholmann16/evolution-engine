@@ -34,6 +34,10 @@ struct LiveSynapse {
 #define EQUAL_BAR 0.90f           // >= 90% shared wiring counts as "the same creature"
 #define ANCESTOR_SYNAPSES (SIZE * 2)
 #define RUNS 30
+#define LEARN_RATE 0.05f          // max weight change per reward()
+#define BASELINE_DECAY 0.8f       // how slowly the expected cost reward() compares against moves
+#define MAX_WEIGHT 4.0f           // largest weight evolve() can add
+#define PRUNE_BELOW 0.01f         // learned weights smaller than this are zeroed (and pruned by Lamarckian)
 #define VISIBLE_OUTPUT_BYTES 16   // for now: debug/visualization tools only care about the first 16 output bytes (128 bits)
 
 // Debug/visualization only -- one sample of a kept neuron's potential after
@@ -90,6 +94,10 @@ class Brain : public Engine {
         }
 
     protected:
+        bool learning = false;   // set by learning engines (Baldwinian/Lamarckian), off for frozen hall of famers
+        bool last_fired[SIZE];
+        int traced_rounds = 0;   // rounds whose traces are waiting on reward()
+        float baseline = -1;     // running expected cost for this load, -1 until the first reward()
         int head[SIZE + 1];   // head[i]..tail[i] is neuron i's synapse row
         int tail[SIZE + 1];   // after load(): exact-fit CSR, tail[i] == head[i+1], head[SIZE] == count
         struct LiveSynapse * synapses;
@@ -116,18 +124,76 @@ class Brain : public Engine {
             head[SIZE] = 0;   // load() rebuilds the whole layout, so clearing is O(1)
         }
 
+        // Inputs stay on for a whole run and weights only change in reward(), so their charge is summed once per run.
+        // Their trace only depends on how many rounds each target fired, so that's counted and folded in once at the end of the run
+        float input_charge[SIZE];
+        size_t input_fires;
+        unsigned short target_fired[SIZE];
+        int input_rounds;
+        bool inputs_primed;   // inputs only count as "fired last round" from a run's second round on
+
+        void cache_inputs(const bool to_fire[SIZE]) {
+            memset(input_charge, 0, sizeof(input_charge));
+            memset(target_fired, 0, sizeof(target_fired));
+            input_fires = 0;
+            input_rounds = 0;
+            inputs_primed = false;
+            for (int i = INPUT_START; i < HIDDEN_START; i++)
+                if (to_fire[i]) {
+                    for (int s = head[i]; s < tail[i]; s++)
+                        input_charge[synapses[s].output] += synapses[s].weight;
+                    input_fires += tail[i] - head[i];
+                }
+        }
+
+        // Same +1 / -0.5 per round fire() would have added, applied in one walk
+        void fold_input_traces(const bool to_fire[SIZE]) {
+            if (!learning || input_rounds == 0)
+                return;
+            for (int i = INPUT_START; i < HIDDEN_START; i++)
+                if (to_fire[i])
+                    for (int s = head[i]; s < tail[i]; s++)
+                        synapses[s].trace += 1.5f * target_fired[synapses[s].output] - 0.5f * input_rounds;
+        }
+
+        // Eligibility trace, folded into the propagation walk: a synapse whose source fired last round gets +1 if its target
+        // fires this round, -0.5 if not. to_fire is already decided by leak(), so one pass can trace and propagate.
+        // Weights only change when reward() says whether those runs went well
         size_t fire(float neuron[SIZE], bool to_fire[SIZE]) {
             size_t fires = 0;
             for (int i = 0; i < EXCLUDING; i++) {
-                if (to_fire[i]) {
+                // Inputs are handled densely at their slot, so a hidden neuron firing this round still resets after receiving their charge
+                if (i == INPUT_START) {
+                    for (int n = HIDDEN_START; n < SIZE; n++)
+                        neuron[n] += input_charge[n];
+                    fires += input_fires;
+                    if (learning && inputs_primed) {
+                        for (int n = HIDDEN_START; n < SIZE; n++)
+                            target_fired[n] += to_fire[n];
+                        input_rounds++;
+                    }
+                    inputs_primed = true;
+                    i = HIDDEN_START - 1;
+                    continue;
+                }
+                const bool learn = learning && last_fired[i];
+                if (to_fire[i] || learn) {
                     const int h = head[i], t = tail[i];
                     for (int synapse = h; synapse < t; synapse++) {
-                        neuron[synapses[synapse].output] += synapses[synapse].weight;
-                        synapses[synapse].trace += neuron[i];
+                        if (learn)
+                            synapses[synapse].trace += to_fire[synapses[synapse].output] ? 1.0f : -0.5f;
+                        if (to_fire[i])
+                            neuron[synapses[synapse].output] += synapses[synapse].weight;
                     }
-                    neuron[i] = THRESHOLD - 1.0f;
-                    fires += t - h;
+                    if (to_fire[i]) {
+                        neuron[i] = THRESHOLD - 1.0f;
+                        fires += t - h;
+                    }
                 }
+            }
+            if (learning) {
+                memcpy(last_fired, to_fire, sizeof(last_fired));
+                traced_rounds++;
             }
             return fires;
         }
@@ -208,7 +274,7 @@ class Brain : public Engine {
             // pass 1: count synapses per input neuron, prefix-sum in place.
             // The last prefix-sum step leaves head[SIZE] == count (every
             // synapse lands in exactly one of head[1..SIZE], and the sweep
-            // folds them all into the final slot) -- reinforce depends on it.
+            // folds them all into the final slot) -- reward depends on it.
             memset(head, 0, sizeof(head));
             for (size_t i = 0; i < count; i++)
                 head[data[i].input + 1]++;          // count into next slot
@@ -224,15 +290,27 @@ class Brain : public Engine {
                 synapses[at].output = data[i].output;
                 synapses[at].trace = 0;
             }
+            traced_rounds = 0;
+            baseline = -1;
         }
 
-        // Only touches real synapses (head[SIZE] == exact count after load).
-        void reinforce(float strength) {
+        // Reward-modulated update: better than this load's running expected cost strengthens synapses with a positive trace
+        // and weakens negative ones, worse does the opposite. Only touches real synapses (head[SIZE] == exact count after load)
+        void reward(float cost) override {
+            if (!learning || traced_rounds == 0)
+                return;
+            // Normalized so every test's cost scale gives an advantage in [-1, 1]; the first reward only sets the baseline
+            float advantage = baseline < 0 ? 0 : std::clamp((baseline - cost) / std::max(baseline, 1e-3f), -1.0f, 1.0f);
+            baseline = baseline < 0 ? cost : BASELINE_DECAY * baseline + (1 - BASELINE_DECAY) * cost;
+            const float step = LEARN_RATE * advantage / traced_rounds;   // trace / traced_rounds is in [-0.5, 1]
             const int n = head[SIZE];
             for (int i = 0; i < n; i++) {
-                synapses[i].weight += (synapses[i].weight > 0) ? synapses[i].trace * strength : -synapses[i].trace * strength;
+                // Multiplicative keeps the sign. Below PRUNE_BELOW it snaps to 0 and stays dead instead of decaying into slow denormals
+                float w = synapses[i].weight * (1 + step * synapses[i].trace);
+                synapses[i].weight = std::fabs(w) < PRUNE_BELOW ? 0 : std::clamp(w, -MAX_WEIGHT, MAX_WEIGHT);
                 synapses[i].trace = 0;
             }
+            traced_rounds = 0;
         }
 
         void evolve(const void * parent, void * child, size_t randomness) override {
@@ -288,6 +366,7 @@ class Brain : public Engine {
             size_t fires = 0;
             float neuron[SIZE] = {0};
             bool to_fire[SIZE] = {0};
+            memset(last_fired, 0, sizeof(last_fired));
 
             // all 256 input bytes -> 2048 input neurons, MSB first
             for (int position = 0; position < 256; position++) {
@@ -295,15 +374,19 @@ class Brain : public Engine {
                 for (int bit = 0; bit < 8; bit++)
                     to_fire[INPUT_START + position * 8 + bit] = (byte >> (7 - bit)) & 1;
             }
+            cache_inputs(to_fire);
 
             for (int count = 0; count < RUNS; count++) {
                 tick_oscillators(to_fire, count + 1);
                 leak(neuron, to_fire);
                 noise(neuron);
                 fires += fire(neuron, to_fire);
-                if (fires > max)
+                if (fires > max) {
+                    fold_input_traces(to_fire);
                     return max;   // note: output buffer left untouched, as before
+                }
             }
+            fold_input_traces(to_fire);
 
             // 2048 output neurons -> all 256 output bytes, MSB first,
             // mirroring the input encoding. Bit set = neuron at/above
@@ -402,11 +485,13 @@ class Brain : public Engine {
 
             float neuron[SIZE] = {0};
             bool to_fire[SIZE] = {0};
+            memset(last_fired, 0, sizeof(last_fired));
             for (int position = 0; position < 256; position++) {
                 unsigned char byte = (unsigned char)input[position];
                 for (int bit = 0; bit < 8; bit++)
                     to_fire[INPUT_START + position * 8 + bit] = (byte >> (7 - bit)) & 1;
             }
+            cache_inputs(to_fire);
 
             std::vector<TraceRound> rounds;
             rounds.reserve(RUNS + 1);

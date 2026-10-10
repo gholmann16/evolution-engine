@@ -67,8 +67,11 @@ inline int hof_wins(const void * code) {
     int wins = 0;
     for (size_t i = 0; i < State::total_famers; i++) {
         State::comp->load(State::hall_of_fame[i]);
+        // Reward cost per game from the genome's side: win 0, tie 0.5, loss 1. The frozen hall of famer ignores it
         int a = fight(State::engine, State::comp);
+        State::engine->reward((1 - a) / 2.0f);
         int b = fight(State::comp, State::engine);
+        State::engine->reward((1 + b) / 2.0f);
         if (a == 0 && b == 0 && State::engine->equal(code, State::hall_of_fame[i])) {
             wins += 2;
         } else {
@@ -99,21 +102,28 @@ inline size_t exhaustive_play(char board[256], char output[256], int empty, char
             continue;
         memcpy(save_board, board, 64);
         save_board[i] = other;
+        // Each line's end rewards the moves since the last line ended: win 0, tie 0.5, loss 1
         if (won(save_board, other)) {
+            State::engine->reward(1);
             total_recursive_score += games_left[empty - 1];
             continue;
         }
 
         exhaustive_runtime += run_as_x(State::engine, save_board, output, State::max_runtime - exhaustive_runtime, player);
         if (place(save_board, output[0], player)) {
+            State::engine->reward(1);
             total_recursive_score += games_left[empty - 1];
             continue;
         }
 
-        if (won(save_board, player))
+        if (won(save_board, player)) {
+            State::engine->reward(0);
             exhaustive_wins += games_left[empty - 1];
+        }
         else if (empty)
             total_recursive_score += exhaustive_play(save_board, output, empty - 2, player, other);
+        else
+            State::engine->reward(0.5f);
     }
     return total_recursive_score;
 }

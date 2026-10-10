@@ -1,6 +1,7 @@
 #include <state.hpp>
 #include "neural_based/network.cpp"
-#include "neural_based/racehorse.cpp"
+#include "neural_based/baldwinian.cpp"
+#include "neural_based/lamarckian.cpp"
 #include "brainfuck_based/brainfuck.cpp"
 #include "brainfuck_based/assembler.cpp"
 #include "brainfuck_based/skipfuck.cpp"
@@ -9,7 +10,8 @@ const char * engine_names[] {
     "Network",
     "Brainfuck",
     "JitFuck",
-    "Racehorse",
+    "Baldwinian",
+    "Lamarckian",
     "Skipfuck",
 };
 
@@ -20,7 +22,8 @@ static Engine * (*raw_factories[])() {
     [] () -> Engine * { return new Network(); },
     [] () -> Engine * { return new Brainfuck(); },
     [] () -> Engine * { return new JitFuck(); },
-    [] () -> Engine * { return new Racehorse(); },
+    [] () -> Engine * { return new Baldwinian(); },
+    [] () -> Engine * { return new Lamarckian(); },
     [] () -> Engine * { return new Skipfuck(); },
 };
 

@@ -15,7 +15,7 @@ tests.o: state.hpp tests/tests.cpp tests/crc8.cpp tests/output.cpp tests/tic_off
 evolvers.o: state.hpp evolvers/evolvers.cpp evolvers/standard.hpp evolvers/above_average.cpp evolvers/squarelite.cpp evolvers/top_10_percent.cpp
 	g++ $(CFLAGS) evolvers/evolvers.cpp
 
-engines.o: state.hpp engines/engines.cpp engines/brainfuck_based/assembler.cpp engines/brainfuck_based/brainfuck.cpp engines/brainfuck_based/brainfuck_base.hpp engines/brainfuck_based/skipfuck.cpp engines/neural_based/network.cpp engines/neural_based/racehorse.cpp engines/neural_based/brain.hpp
+engines.o: state.hpp engines/engines.cpp engines/brainfuck_based/assembler.cpp engines/brainfuck_based/brainfuck.cpp engines/brainfuck_based/brainfuck_base.hpp engines/brainfuck_based/skipfuck.cpp engines/neural_based/network.cpp engines/neural_based/baldwinian.cpp engines/neural_based/lamarckian.cpp engines/neural_based/brain.hpp
 	g++ $(CFLAGS) engines/engines.cpp
 
 cli.o: state.hpp cli.cpp

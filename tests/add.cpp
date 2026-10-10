@@ -34,7 +34,9 @@ class Add : public Test {
                 if (runtime == State::max_runtime)
                     return State::max_runtime * 50;
 
-                error += abs(sum[i] - (unsigned char)output[0]);
+                int trial_error = abs(sum[i] - (unsigned char)output[0]);
+                State::engine->reward(trial_error);
+                error += trial_error;
             }
 
             return error ? runtime + State::engine->size(code) * 5 + error * 10000 : 0;

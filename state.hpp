@@ -44,6 +44,8 @@ public:
     virtual size_t size(const void * code) = 0;
     // Wipe an allocated program and copy parent code into it.
     virtual void copy_into(const void * parent, void * child) = 0;
+    // Cost (lower is better) of the run()s since the last call. Learning engines adjust weights from it, others ignore it
+    virtual void reward(float cost) {}
 };
 
 extern const char * engine_names[];

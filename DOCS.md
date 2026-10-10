@@ -5,7 +5,7 @@ Everything lives behind three abstract interfaces and one global mutable state, 
 ## Contents
 
 - [Program](#program) the structure used to transport data
-- [Engines](#engines) — Brainfuck, JitFuck, Skipfuck, Network, Racehorse
+- [Engines](#engines) — Brainfuck, JitFuck, Skipfuck, Network, Baldwinian, Lamarckian
 - [Evolvers](#evolvers) — Squarelite, Above_Average, Top_10_Percent
 - [Tests](#tests) — Crc8, Output, Tic_Off, TicTacToe, Add
 - [Output files](#output-files) — `data.txt`, `graph.txt`
@@ -24,7 +24,7 @@ Genomes are stored as programs that are type independent so as to be handled by 
 ### `Engine` => the thing that runs the genome
 
 Interfaces for interpretting different kinds of genomes, like brainfuck or neural network.
-(`Brainfuck`, `JitFuck`, `Skipfuck`, `Network`, `Racehorse`):
+(`Brainfuck`, `JitFuck`, `Skipfuck`, `Network`, `Baldwinian`, `Lamarckian`):
 
 ```cpp
 class Engine {
@@ -157,9 +157,14 @@ only.
 
 Genome: a flat array of `Synapse { unsigned short input, output; float multiplier; }` edges over a fixed pool of 8192 neurons: 2048 input neurons (one per bit of the 256-byte input buffer), 4096 worker neurons, and 2048 output neurons (one per bit of the 256-byte output buffer). There are no fixed layers; any neuron can connect to any other, subject to the input/output conventions above. Evaluation runs 30 fixed propagation rounds: each round, neuron potentials leak (decay toward zero), any neuron at/above threshold fires (pushing weighted charge onto its targets and resetting itself), and after all rounds the output neurons are bit-packed back into a 256-byte output buffer. `max_runtime` counts total synapse *firings* across all 30 rounds (and so in naturally way higher than the brainfuck interpreters). `ancestor_prog()` guarantees every input neuron starts with at least one random outgoing synapse, so evolution always has a gradient to discover an input's usefulness rather than starting from a totally dead input. `equal()` uses fuzzy comparison (≥90% of wiring — not weights — must match) for hall-of-fame/diversity purposes, since nearly every mutation nudges nearly every weight.
 
-### `Racehorse` (in progress)
+### `Baldwinian` / `Lamarckian` => learning networks
 
-A `Network`/`Brain` variant intended (per its own comment) to mutate synaptic *weights* in live time as a brain develops a "memory". Not sure how to conicide with evolution, but maybe it just remembers round by round.
+`Network` plus reward-modulated learning. During `run()`, each round, a synapse whose source fired last round adds +1 to its eligibility `trace` if its target fires this round, and -0.5 if not. Weights only change when a test calls `Engine::reward(cost)` after a trial or game (Output, Add and the tic-tac-toe tests do; Crc8 doesn't). The cost is compared against a running baseline of this load's earlier costs: doing better than expected scales positive-trace synapses up and negative ones down (up to 5%), doing worse does the opposite. Signs are kept, weights are clamped to ±4, and a weight that drops below 0.01 is set to 0 and stays dead for the rest of that load. Learned weights persist across every `run()` in one `score()` call, so a genome can improve over a test's trials.
+
+- **`Baldwinian`**: learning is thrown away at the next `load()`. Evolution selects for genomes that *learn* well.
+- **`Lamarckian`**: after every `reward()` the learned weights are written back into the genome (zeroed synapses pruned), so children inherit them. GUI runs don't call `reward()`, so they never change a genome.
+
+Hall of famers are frozen: they run with learning off and ignore `reward()`, like inference. Tracing is folded into `Brain::fire()`'s propagation pass behind a `learning` flag, so `Network`'s results are unchanged.
 
 ## Evolvers
 
@@ -229,7 +234,6 @@ Overwritten every generation with `engine->debug(children[0].code)` — raw Brai
 ## Known quirks / rough edges
 
 - **`Engine::compile()`** is unfinished/unused
-- **`Racehorse`** is completely unimplemented despite being present and visible.
 
 ### Other
 There's also a deprecated `sucrisc/` engine (a tiny custom RISC ISA + a compiler to x86-64 assembly)
