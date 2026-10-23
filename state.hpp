@@ -135,6 +135,7 @@ namespace State {
     inline size_t def_rand = 250;
     inline bool verbose = false;
     inline size_t seed = 0;
+    inline size_t max_executions = -1; // extremely large amount
 
     // Shared engine->run() iteration cap, replacing what used to be a
     // separate hardcoded constant per test (Output's MAX_RUNTIME, Add/Crc8's

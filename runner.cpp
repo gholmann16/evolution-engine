@@ -11,8 +11,6 @@
 
 void * last_code = NULL;
 
-#define EXECUTIONS 100000000
-
 // Returns false = end program
 bool cli_interpret() {
     bool repeat = false;
@@ -88,7 +86,7 @@ int runner() {
     std::ofstream ofs(State::output, std::ofstream::out | std::ofstream::trunc);
     ofs.close();
 
-    while (running && State::runs < EXECUTIONS) {
+    while (running && State::runs < State::max_executions) {
         // Determinism
         srand(State::seed + State::runs);
 

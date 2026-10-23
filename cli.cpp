@@ -68,56 +68,47 @@ int main(int argc, char * argv[]) {
 
     for (int i = 1; i < argc; i++)
         switch(hash(argv[i])) {
-            case hash("-h"):
-            case hash("--help"):
+            case hash("-h"): case hash("--help"):
                 help();
                 return 0;
-            case hash("-l"):
-            case hash("--list"):
+            case hash("-l"): case hash("--list"):
                 list();
                 return 0;
-            case hash("-n"):
-            case hash("--engine"): {
+            case hash("-n"): case hash("--engine"): {
                 int idx = pos(engine_names, argv[++i], num_engines);
                 State::engine = make_engine(idx);
                 State::comp = make_engine(idx);
                 break;
             }
-            case hash("-e"):
-            case hash("--evolver"):
+            case hash("-e"): case hash("--evolver"):
                 State::evolver = evolvers[pos(evolver_names, argv[++i], num_evolvers)];
                 break;
-            case hash("-t"):
-            case hash("--test"):
+            case hash("-t"): case hash("--test"):
                 State::test = tests[pos(test_names, argv[++i], num_tests)];
                 break;
-            case hash("-v"):
-            case hash("--verbose"):
+            case hash("-v"): case hash("--verbose"):
                 State::verbose = true;
                 break;
-            case hash("-c"):
-            case hash("--children"):
+            case hash("-c"): case hash("--children"):
                 sscanf(argv[++i], "%zu", &State::total_creatures);
                 break;
-            case hash("-f"):
-            case hash("--famers"):
+            case hash("-f"): case hash("--famers"):
                 sscanf(argv[++i], "%zu", &State::total_famers);
                 break;
-            case hash("-r"):
-            case hash("--randomness"):
+            case hash("-r"): case hash("--randomness"):
                 sscanf(argv[++i], "%zu", &State::def_rand);
                 break;
-            case hash("-s"):
-            case hash("--seed"):
+            case hash("-s"): case hash("--seed"):
                 sscanf(argv[++i], "%zu", &State::seed);
                 break;
-            case hash("-o"):
-            case hash("--output"):
+            case hash("-o"): case hash("--output"):
                 State::output = argv[++i];
                 break;
-            case hash("-m"):
-            case hash("--max-runtime"):
+            case hash("-m"): case hash("--max-runtime"):
                 sscanf(argv[++i], "%zu", &State::max_runtime);
+                break;
+            case hash("-x"): case hash("--executions"):
+                sscanf(argv[++i], "%zu", &State::max_executions);
                 break;
             default:
                 printf("%s not a valid argument, maybe you forgot to preface it?\n", argv[i]);

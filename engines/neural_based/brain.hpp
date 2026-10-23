@@ -89,7 +89,7 @@ class Brain : public Engine {
 
         void reserve(int needed) {
             if (needed <= capacity) return;
-            while (capacity < needed) capacity *= 2;   // geometric, not +1000
+            while (capacity < needed) capacity *= 2;
             synapses = (LiveSynapse *)realloc(synapses, capacity * sizeof(LiveSynapse));
         }
 
@@ -101,24 +101,6 @@ class Brain : public Engine {
         int head[SIZE + 1];   // head[i]..tail[i] is neuron i's synapse row
         int tail[SIZE + 1];   // after load(): exact-fit CSR, tail[i] == head[i+1], head[SIZE] == count
         struct LiveSynapse * synapses;
-
-        // Kept for incremental insertion. Note: O(total) shift per overflow —
-        // for whole genomes always prefer load(), which is O(n).
-        void add_synapse(Synapse add) {
-            if (tail[add.input] == head[add.input + 1]) {
-                size_t distance = head[SIZE] - tail[add.input];
-                for (int i = add.input + 1; i <= SIZE; i++) {
-                    head[i] += SYNAPSES;
-                    tail[i] += SYNAPSES;
-                }
-                reserve(head[SIZE]);
-                memmove(&synapses[head[add.input + 1]], &synapses[tail[add.input]], distance * sizeof(LiveSynapse));
-            }
-            synapses[tail[add.input]].weight = add.multiplier;
-            synapses[tail[add.input]].output = add.output;
-            synapses[tail[add.input]].trace = 0;
-            tail[add.input]++;
-        }
 
         void clear() {
             head[SIZE] = 0;   // load() rebuilds the whole layout, so clearing is O(1)
@@ -216,7 +198,7 @@ class Brain : public Engine {
 
         void noise(float neuron[SIZE]) {
             return;
-            for (int i = 0; i < SIZE; i++) {
+            for (int i = HIDDEN_START; i < SIZE; i++) {
                 neuron[i] += -0.05f + rng_unit() * 0.1f;
             }
         }
@@ -262,7 +244,7 @@ class Brain : public Engine {
         }
 
         // Two-pass counting-sort build: O(n) for any genome. Replaces the
-        // add_synapse path, which shifts all downstream data every time a
+        // add_synapse path, which shifted all downstream data every time a
         // 10-slot block overflows (O(n * SIZE) on evolved genomes).
         void load(const void * code) {
             const std::string& code_ref = *reinterpret_cast<const std::string*>(code);
@@ -367,6 +349,7 @@ class Brain : public Engine {
             float neuron[SIZE] = {0};
             bool to_fire[SIZE] = {0};
             memset(last_fired, 0, sizeof(last_fired));
+            rng_state = 0x9E3779B97F4A7C15ull;   // same noise every run; evolve() reseeds its own stream anyway
 
             // all 256 input bytes -> 2048 input neurons, MSB first
             for (int position = 0; position < 256; position++) {
